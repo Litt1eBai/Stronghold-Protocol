@@ -44,6 +44,7 @@ import { Lobby } from './lobby.js';
 import { getData, loadData } from './data.js';
 import { PROTOCOL_VERSION, APP_VERSION } from '../shared/constants.js';
 import { MEDIA_PREFIX, AUDIO_EXTS } from '../shared/media.js';
+import { AuthStore, authMode } from './auth.js';
 
 /** Repository root. */
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -634,7 +635,8 @@ export async function startServer(opts = {}) {
     if (opts[k] != null) lobbyOptions[k] = opts[k];
   }
   const lobby = new Lobby({ registry, log, MatchClass: opts.MatchClass, getData: () => data, seedFn: opts.seedFn, options: lobbyOptions });
-  const network = new Network({ registry, handler: lobby, log, options: netOptions });
+  const auth = opts.auth || new AuthStore({ required: authMode() === 'required', log });
+  const network = new Network({ registry, handler: lobby, auth, log, options: netOptions });
   const serveStatic = createStaticHandler({ publicDir, dataDir, sharedDir, log });
   const startedAt = Date.now();
   // The tag is per process (see buildTag): read the browser runtime once, here, not on every /healthz.
@@ -666,6 +668,7 @@ export async function startServer(opts = {}) {
         // the runtime the server is serving right now (public/js/ui/buildGuard.js): a page whose own build is
         // older than this reloads itself, so a deploy reaches clients that never reload
         build: buildTag(),
+        auth: { required: auth.enabled(), users: auth.count() },
         sockets: network.connectionCount, sessions: registry.size, ...lobby.stats(),
       });
       return;

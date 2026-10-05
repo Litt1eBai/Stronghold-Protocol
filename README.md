@@ -54,6 +54,7 @@ English summary: [below](#english).
 - **最终攻势与隐秘核心**：两人共享一个战场，全队共同削减同一条领袖血条；10 个敌方领袖，巨型领袖约 5×3 格的受击范围，以及官方的限伤规则。
 - **结算称号**：卫戍之星、不朽盟约、坚若磐石等 6 个称号。
 - **断线重连**：同盟模拟断线后 10 分钟内重新打开页面即可回到原座位，掉线期间按原阵容自动作战，也可以「暂离」交给 AI 托管；独立模拟 24 小时内可以回来继续（同一个浏览器）。
+- **封闭大厅**：部署时可启用管理员创建的账号登录（`SP_AUTH=required`），没有公开注册；登录用户可查看公开同盟列表，再按房间码加入或创建房间。
 - **交互细节**：漏怪时顶栏的目标生命值实时减少（结算时确定）；点选、拖放和配发装备都按地上的方格；购买、升级和机变选卡都需要点两次确认；只有一名玩家时除作战外不计时。
 - **画面与声音**：真实 Spine 小人、官方 BGM 与音效、表情（6 套 × 6 个）、作战特效；可选的官方 3D 棋盘（需要从本机客户端提取贴图）。
 - **手机与电脑**：触摸拖拽、长按查看详情，推荐横屏；设置里可以调低画质。
@@ -113,6 +114,11 @@ npm start          # 启动服务器：http://localhost:3000
 | `TRUST_PROXY` | `auto` | 是否信任 `X-Forwarded-For` 等转发头：`auto` 只信任来自本机 / 内网的代理；`1` 总是；`0` 从不 |
 | `DEBUG` | 空 | 设为任意值输出详细日志 |
 | `SP_NO_BROWSER` | 空 | 设为 `1` 时启动脚本不自动打开浏览器 |
+| `SP_AUTH` | `off` | 设为 `required` 开启封闭账号登录（无公开注册） |
+| `SP_AUTH_SECRET` | 空 | 账号 token 签名密钥；开启账号时必须设置 |
+| `SP_ACCOUNTS_FILE` | `.cache/accounts.json` | 账号数据文件路径 |
+
+公网熟人服可以开启封闭账号：设置 `SP_AUTH=required` 和随机的 `SP_AUTH_SECRET`。账号由管理员在服务器上创建，客户端没有注册入口。创建账号：`SP_AUTH_SECRET=同一串密钥 node tools/admin.mjs user create alice 密码 昵称`；查看、禁用、启用账号见 `node tools/admin.mjs user list|disable|enable <用户名>`。账号文件默认位于 `.cache/accounts.json`，请备份并限制文件权限。
 
 设置方式：macOS / Linux `PORT=8080 npm start`；PowerShell `$env:PORT=8080; npm start`；cmd `set "PORT=8080" && npm start`。健康检查：`GET /healthz`。
 

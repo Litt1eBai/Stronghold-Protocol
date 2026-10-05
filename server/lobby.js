@@ -218,6 +218,21 @@ export class Lobby {
   /** @param {string} code @returns {Room | null} */
   getRoom(code) { return this.rooms.get(String(code).toUpperCase()) || null; }
 
+  /** Public discovery list. Private state (host ids, tokens, loadouts and match internals) is never exposed. */
+  publicRooms() {
+    return [...this.rooms.values()]
+      .filter((r) => r.mode === 'coop' && !r.disposed)
+      .map((r) => ({ code: r.code, mode: r.mode, difficulty: r.difficulty, inMatch: !!r.match,
+        players: r.seats.filter((s) => s && !s.left).length, seats: r.seats.filter((s) => s && !s.left).length, spectators: r.spectators.length,
+        maxSeats: MAX_SEATS, maxSpectators: MAX_SPECTATORS, createdAt: r.createdAt }))
+      .sort((a, b) => a.inMatch - b.inMatch || a.createdAt - b.createdAt);
+  }
+
+  listPublic(session) {
+    sendSession(session, { t: 'room.list', rooms: this.publicRooms() });
+    return { ok: true };
+  }
+
   /** Counters for /healthz. */
   stats() {
     let matches = 0;
@@ -279,6 +294,7 @@ export class Lobby {
    */
   onMessage(session, msg) {
     switch (msg.t) {
+      case 'room.list': return this.listPublic(session);
       case 'room.create': return this.create(session, msg);
       case 'room.join': return this.join(session, msg);
       case 'room.leave': return this.leave(session);

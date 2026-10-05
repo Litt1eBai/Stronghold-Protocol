@@ -66,12 +66,13 @@ export const isValidName = (raw) => sanitizeName(raw).length > 0;
  * @param {string} rawName
  * @returns {boolean} false when the name is invalid
  */
-export function enterSession(rawName) {
+export function enterSession(rawName, password = '') {
   const name = sanitizeName(rawName);
   if (!name) return false;
   identity.saveName(name);
   identity.setEntered(true);
   store.set((s) => ({ me: { ...s.me, name }, session: { ...s.session, entered: true } }));
+  net.setCredentials(name, password);
   net.setName(name);
   return true;
 }
@@ -183,6 +184,7 @@ export function TitleScreen() {
   const conn = useStore((s) => s.connection, shallowEqual);
   const pendingJoin = useStore((s) => s.ui.pendingJoin);
   const [name, setName] = useState(() => store.get().me.name || identity.loadName() || '');
+  const [password, setPassword] = useState('');
   const assetsSettled = useData('assets');
   const assets = data.get('assets');
   const backdrop = findUiAsset(assets, BACKDROP_KEYS);
@@ -200,7 +202,7 @@ export function TitleScreen() {
   const valid = isValidName(name);
   const start = () => {
     if (!valid) { toast('请输入博士代号', 'warn'); return; }
-    enterSession(name);
+    enterSession(name, password);
   };
 
   const online = conn.status === 'online' || conn.status === 'connected';
@@ -249,9 +251,11 @@ export function TitleScreen() {
           <${Icon} name="key" />
           <span>收到同盟邀请</span><b class="num">${pendingJoin}</b><span class="t-lo">· 输入代号后将自动加入</span>
         </div>` : null}
-        <${TextField} label="博士代号" micro="CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
-          placeholder="输入你的代号（最多 ${NAME_MAX_LEN} 字）" autoFocus=${!touchUi}
+        <${TextField} label="账号 / 博士代号" micro="ACCOUNT / CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
+          placeholder="封闭服务器输入账号，否则输入代号" autoFocus=${!touchUi}
           onInput=${setName} onEnter=${start} />
+        <${TextField} label="密码" micro="PASSWORD" size="lg" icon="lock" type="password"
+          value=${password} maxLength=${256} placeholder="封闭服务器必填，匿名模式可留空" onInput=${setPassword} onEnter=${start} />
         <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" disabled=${!valid} onClick=${start}>开始<//>
         <div class="title-conn">
           <span class=${`status-dot ${dotClass}`}></span>

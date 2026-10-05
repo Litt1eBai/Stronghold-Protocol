@@ -88,6 +88,10 @@ export class Session {
     this.token = token;
     /** @type {string} sanitized nickname */
     this.name = name;
+    /** @type {string | null} closed-account id when SP_AUTH is enabled */
+    this.accountId = null;
+    /** @type {{id:string,username:string,displayName:string,role:string}|null} */
+    this.account = null;
     /** @type {import('ws').WebSocket | null} currently bound socket */
     this.ws = null;
     /** @type {boolean} */
@@ -498,14 +502,16 @@ export class Network {
    * @param {{
    *   registry: SessionRegistry,
    *   handler: { onHello?: Function, onMessage: Function, onDisconnect?: Function, onExpire?: Function },
+   *   auth?: { enabled?: () => boolean, verify?: (token: string) => any, verifyCredentials?: (username: string, password: string) => any, issue?: (user: any) => string },
    *   log?: { info: Function, warn: Function, error: Function, debug?: Function },
    *   now?: () => number,
    *   options?: Partial<typeof NET_DEFAULTS>,
    * }} opts
    */
-  constructor({ registry, handler, log = noopLog, now = Date.now, options = {} }) {
+  constructor({ registry, handler, auth = null, log = noopLog, now = Date.now, options = {} }) {
     this.registry = registry;
     this.handler = handler;
+    this.auth = auth;
     this.log = log;
     this.now = now;
     this.opts = { ...NET_DEFAULTS, ...options };
@@ -628,8 +634,23 @@ export class Network {
       this.reply(conn, errorMsg(ERR.BAD_MSG, rid, `version mismatch: server ${PROTOCOL_VERSION}`));
       return;
     }
-    const name = sanitizeName(msg.name);
-    if (!name) { this.reply(conn, errorMsg(ERR.BAD_MSG, rid, 'bad field name')); return; }
+    const suppliedName = sanitizeName(msg.name);
+    if (!suppliedName) { this.reply(conn, errorMsg(ERR.BAD_MSG, rid, 'bad field name')); return; }
+
+    const authEnabled = !!this.auth?.enabled?.();
+    let account = null;
+    const tokenSession = msg.token ? this.registry.byToken(msg.token) : null;
+    if (tokenSession?.account) account = tokenSession.account;
+    if (authEnabled) {
+      if (!account && msg.auth) account = this.auth.verify?.(msg.auth) || null;
+      if (!account && msg.username && msg.password) account = this.auth.verifyCredentials?.(msg.username, msg.password) || null;
+      if (!account) {
+        this.reply(conn, errorMsg(msg.username || msg.password || msg.auth ? ERR.AUTH_INVALID : ERR.AUTH_REQUIRED, rid));
+        return;
+      }
+    }
+    const name = sanitizeName(account?.displayName || suppliedName);
+    if (!name) { this.reply(conn, errorMsg(ERR.BAD_MSG, rid, 'bad account display name')); return; }
 
     let session = conn.session;
     let resumed = false;
@@ -649,11 +670,15 @@ export class Network {
       session.disconnectedAt = null;
     }
     session.name = name;
+    session.accountId = account?.id || session.accountId || null;
+    session.account = account || session.account || null;
     session.lastSeen = now;
     session.addr = conn.ip;
     session.limitKey = conn.key;
 
-    const welcome = { t: 'welcome', playerId: session.playerId, token: session.token, name: session.name, serverNow: now, version: PROTOCOL_VERSION, resumed };
+    const welcome = { t: 'welcome', playerId: session.playerId, token: session.token, name: session.name, serverNow: now, version: PROTOCOL_VERSION, resumed,
+      account: account ? { id: account.id, username: account.username, displayName: account.displayName, role: account.role } : null };
+    if (account && !msg.auth && this.auth.issue) welcome.auth = this.auth.issue(account);
     if (validRid(rid)) welcome.rid = rid;
     this.reply(conn, welcome);
     try {

@@ -231,6 +231,7 @@ function DifficultyCard({ roomMode, difficulty, selected, onSelect }) {
 export function LobbyScreen() {
   const me = useStore((s) => s.me, shallowEqual);
   const conn = useStore((s) => s.connection, shallowEqual);
+  const lobbyRooms = useStore((s) => s.lobbyRooms || [], shallowEqual);
   useData('config');
   const [roomMode, setRoomMode] = useState(() => (loadPref('lobby.mode', 'coop') === 'solo' ? 'solo' : 'coop'));
   const [difficulty, setDifficulty] = useState(() => {
@@ -242,9 +243,16 @@ export function LobbyScreen() {
   const [recent] = useState(recentRooms);
   const alive = useRef(true);
   const inFlight = useRef(false); // synchronous guard against double clicks (state updates are async)
-  useEffect(() => () => { alive.current = false; }, []);
-
   const online = conn.status === 'online';
+  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => {
+    if (!online) return undefined;
+    const refresh = () => net.request('room.list').catch(() => {});
+    refresh();
+    const id = setInterval(refresh, 5000);
+    return () => clearInterval(id);
+  }, [online]);
+
   const codeOk = CODE_RE.test(code);
 
   const pickMode = (m) => { setRoomMode(m); savePref('lobby.mode', m); };
@@ -317,6 +325,15 @@ export function LobbyScreen() {
 
     <div class="lobby-body screen__scroll">
       <section class="lobby-left">
+        <div class="section-label"><span class="section-label__idx num">00</span>公开同盟<${MicroLabel}>PUBLIC ROOMS<//></div>
+        <${Panel} class="join-panel" tone="mint">
+          ${lobbyRooms.length ? lobbyRooms.map((r) => html`<div class="join-row" key=${r.code}>
+            <span class="num">${r.code}</span><span>${r.inMatch ? '作战中' : '等待中'} · ${r.players}/${r.maxSeats}</span>
+            <${Button} variant="secondary" size="sm" disabled=${r.inMatch || r.seats >= r.maxSeats} onClick=${() => { setCode(r.code); join(r.code); }}>
+              ${r.inMatch ? '观战' : '加入'}
+            <//>
+          </div>`) : html`<span class="t-dim">暂无公开同盟，创建一个邀请朋友吧</span>`}
+        <//>
         <div class="section-label"><span class="section-label__idx num">01</span>模拟方式<${MicroLabel}>MODE<//></div>
         <div class="mode-cards">
           ${MODE_CARDS.map((c) => html`<${ModeCard} key=${c.id} card=${c} selected=${roomMode === c.id} onSelect=${pickMode} />`)}

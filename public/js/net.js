@@ -5,7 +5,7 @@
 //   detects dead sockets (a ping left unanswered — no inbound frame at all — for DEAD_AFTER_MS ⇒
 //   close ⇒ reconnect). Measured from the oldest unanswered ping, not from the last inbound frame,
 //   so a background tab whose timers the browser throttles to ~1/min is not mistaken for dead.
-// - On every (re)connect, once a player name is known, sends `hello {name, token, version}`;
+// - On every (re)connect, once a player name is known, sends `hello {name, token, auth, version}`;
 //   the session is "online" after `welcome`.
 // - `request(t, fields)` adds a `rid` and resolves on the matching `ok` (or any reply carrying the
 //   rid), rejects with a NetError on `error` or after REQUEST_TIMEOUT_MS. Requests made while
@@ -97,6 +97,17 @@ export function backoffDelay(attempt, rand = Math.random) {
  * @returns {string}
  */
 export function defaultWsUrl(loc = globalThis.location) {
+  const fixed = globalThis.__SP_SERVER_URL__;
+  if (typeof fixed === 'string' && fixed.trim()) {
+    try {
+      const u = new URL(fixed.trim());
+      u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      u.pathname = `${u.pathname.replace(/\/$/, '')}/ws`;
+      u.search = '';
+      u.hash = '';
+      return u.toString();
+    } catch { /* fall back to the page origin */ }
+  }
   if (!loc || !loc.host) return 'ws://localhost:3000/ws';
   return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 }
@@ -134,6 +145,9 @@ export class Net {
     this.status = 'idle';
     this.ws = null;
     this.name = null;          // desired player name (hello is sent when set)
+    this.username = null;
+    this.password = null;      // held only until the server returns an auth token
+    this.authToken = (() => { try { return globalThis.localStorage?.getItem('sp.auth') || null; } catch { return null; } })();
     this.helloName = null;     // name we sent in the hello that got the last welcome
     this.serverName = null;    // name as normalised by the server
     this.playerId = null;
@@ -284,6 +298,18 @@ export class Net {
     this._sendHello();
   }
 
+  /** Set closed-platform credentials. Password is never persisted and is cleared after welcome. */
+  setCredentials(username, password) {
+    const next = typeof username === 'string' ? username.trim() : null;
+    if (this.username && next && this.username.toLowerCase() !== next.toLowerCase()) {
+      this.authToken = null;
+      try { globalThis.localStorage?.removeItem('sp.auth'); } catch { /* storage unavailable */ }
+    }
+    this.username = next;
+    this.password = typeof password === 'string' ? password : null;
+    if (this.username) this.setName(this.username);
+  }
+
   _onOpen() {
     this._openedAt = this.now();
     this._lastRx = this._openedAt;
@@ -365,6 +391,11 @@ export class Net {
     let token = null;
     try { token = this.getToken(); } catch { token = null; }
     if (typeof token === 'string' && token.length > 0 && token.length <= 64) msg.token = token;
+    if (typeof this.authToken === 'string' && this.authToken) msg.auth = this.authToken;
+    else {
+      if (this.username) msg.username = this.username;
+      if (this.password) msg.password = this.password;
+    }
     this._helloRid = rid;
     this._helloSentName = this.name;
     if (this.status !== 'handshaking') this._setStatus('handshaking');
@@ -388,6 +419,11 @@ export class Net {
     // Compare future setName() calls against what we sent (the server may normalise the name).
     this.helloName = this._helloSentName;
     this.serverName = typeof msg.name === 'string' && msg.name ? msg.name : this._helloSentName;
+    if (typeof msg.auth === 'string' && msg.auth) {
+      this.authToken = msg.auth;
+      try { globalThis.localStorage?.setItem('sp.auth', msg.auth); } catch { /* storage unavailable */ }
+    }
+    this.password = null;
     this.playerId = msg.playerId ?? null;
     this.attempt = 0;
     this.lastError = null;

@@ -176,6 +176,26 @@ https / wss 说明：页面通过 https 打开时客户端自动连接 `wss://�
 
 ## 3. Docker
 
+### 3.0 封闭账号（熟人分发）
+
+账号系统默认关闭以兼容源码开发；公网部署建议打开：
+
+```bash
+export SP_AUTH=required
+export SP_AUTH_SECRET="$(openssl rand -hex 32)"
+node tools/admin.mjs user create alice '至少八位的密码' 爱丽丝
+```
+
+没有注册接口，只有能登录服务器主机的管理员可以创建、启用或禁用账号：
+
+```bash
+node tools/admin.mjs user list
+node tools/admin.mjs user disable alice
+node tools/admin.mjs user enable alice
+```
+
+账号数据默认保存在 `.cache/accounts.json`；生产环境应把 `SP_AUTH_SECRET` 写入服务管理器的私有环境文件，并把账号文件备份到受限目录。APK 不包含账号密码，只包含固定的 HTTPS 服务器地址。
+
 ```bash
 # A) 构建时下载素材（需要联网，约 250 MB）
 docker build -t stronghold-protocol --build-arg FETCH_ASSETS=1 .

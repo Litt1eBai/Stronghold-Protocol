@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+
+def repoRoot = file('../..')
+def bundledWeb = file("${projectDir}/src/main/assets/web")
+
+// Package the complete public/ tree, including downloaded art/audio, into the APK.
+tasks.register('syncGameAssets', Sync) {
+    from file("${repoRoot}/public")
+    into bundledWeb
+    includeEmptyDirs = false
+    doFirst {
+        def art = file("${repoRoot}/public/assets")
+        if (!art.isDirectory() || !art.listFiles()?.length) {
+            throw new GradleException('public/assets is missing or empty; run node tools/setup.mjs before building the APK')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn tasks.named('syncGameAssets') }
+
+def serverUrl = project.findProperty('serverUrl') ?: 'https://play.example.com'
+
+android { namespace 'com.strongholdprotocol.client'; compileSdk 35
+    defaultConfig {
+        applicationId 'com.strongholdprotocol.client'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1.3'
+        buildConfigField 'String', 'SERVER_URL', '"https://play.example.com"'
+    }
+    buildTypes { release { minifyEnabled false; buildConfigField 'String', 'SERVER_URL', '"' + serverUrl.replace('"', '') + '"' } }
+    buildFeatures { buildConfig true }
+}

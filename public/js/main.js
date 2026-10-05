@@ -138,7 +138,8 @@ function onWelcome(msg) {
   const prev = store.get();
   const prevId = prev.me.playerId;
   const name = typeof msg.name === 'string' && msg.name ? msg.name : prev.me.name;
-  store.set({ me: { playerId: msg.playerId ?? null, name, token: typeof msg.token === 'string' ? msg.token : null } });
+  store.set({ me: { playerId: msg.playerId ?? null, name, token: typeof msg.token === 'string' ? msg.token : null,
+    account: msg.account && typeof msg.account === 'object' ? msg.account : null } });
   welcomeAt = Date.now();
 
   if (prevId != null && prevId !== msg.playerId) {
@@ -200,10 +201,17 @@ function wireNet() {
   });
   net.on('clock', (c) => store.set({ clock: { offset: c.offset, rtt: c.rtt, synced: c.synced } }));
   net.on('welcome', onWelcome);
-  net.on('helloError', (err) => toastError(err));
+  net.on('helloError', (err) => {
+    if (['AUTH_REQUIRED', 'AUTH_INVALID', 'AUTH_DISABLED'].includes(err?.code)) {
+      identity.setEntered(false);
+      store.set((s) => ({ session: { ...s.session, entered: false } }));
+    }
+    toastError(err);
+  });
   net.on('replaced', () => toast('该身份已在其他页面登录，本页已断开', 'warn', { ttl: 6000 }));
   net.on('unhandledError', (err) => toastError(err));
   net.on('room.state', onRoomState);
+  net.on('room.list', (msg) => store.set({ lobbyRooms: Array.isArray(msg.rooms) ? msg.rooms : [] }));
   net.on('room.closed', (msg) => {
     backToLobby();
     toast(CLOSE_REASON[msg.reason] || (typeof msg.reason === 'string' && msg.reason.length < 60 ? `同盟已关闭：${msg.reason}` : '同盟已关闭'), 'warn');
