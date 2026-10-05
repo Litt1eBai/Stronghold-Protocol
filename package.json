@@ -36,7 +36,11 @@
     "launch": "node scripts/launch.mjs",
     "desktop:prepare": "node tools/prepare-tauri.mjs",
     "desktop:dev": "npm --prefix desktop run dev",
-    "desktop:build": "npm --prefix desktop run build"
+    "desktop:build": "npm --prefix desktop run build",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "client:android:init": "npm --prefix client run android:init",
+    "client:android:build": "npm --prefix client run android:build"
   },
   "engines": {
     "node": ">=22"

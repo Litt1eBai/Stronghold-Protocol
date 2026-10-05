@@ -5,7 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const out = path.join(root, 'desktop', 'web');
+const projectArg = process.argv.indexOf('--project-dir');
+const projectDir = (projectArg >= 0 ? process.argv[projectArg + 1] : null) || process.env.TAURI_PROJECT_DIR || 'client';
+const out = path.join(root, projectDir, 'web');
 const serverUrl = String(process.env.SP_SERVER_URL || 'https://play.example.com').trim();
 if (!/^https:\/\//i.test(serverUrl)) throw new Error('SP_SERVER_URL must be an https:// URL');
 

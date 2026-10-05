@@ -1,0 +1,15 @@
+{
+  "name": "stronghold-protocol-client",
+  "private": true,
+  "version": "0.1.3",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.0"
+  }
+}
