@@ -6,6 +6,9 @@ def bundledWeb = file("${projectDir}/src/main/assets/web")
 // Package the complete public/ tree, including downloaded art/audio, into the APK.
 tasks.register('syncGameAssets', Sync) {
     from file("${repoRoot}/public")
+    from(file("${repoRoot}/shared")) { into 'shared' }
+    from(file("${repoRoot}/data")) { into 'data' }
+    from(file("${repoRoot}/server/sim")) { into 'sim' }
     into bundledWeb
     includeEmptyDirs = false
     doFirst {
