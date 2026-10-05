@@ -174,6 +174,7 @@ npm start          # 启动服务器：http://localhost:3000
 | [docs/PLAYING.md](docs/PLAYING.md) | 玩法指南：流程、经济、招募与晋升、摆阵、联防、盟约、最终攻势、结算称号 |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | 通用部署指南：代码与素材准备、常驻服务、HTTPS / WebSocket、账号、Windows、Docker、CNB、Linux、APK 分发与排错 |
 | [android/README.md](android/README.md) | Android APK：固定服务器地址、本地资源封装与 release 构建 |
+| [desktop/README.md](desktop/README.md) | Tauri 2 桌面客户端：固定服务器地址与 Windows 安装包构建 |
 | [docs/WINDOWS.md](docs/WINDOWS.md) | Windows 便携包：怎么打一份「零安装」包（`scripts/make-windows-bundle.mjs`）、包里放了什么、授权注意事项 |
 | [docs/DESIGN.md](docs/DESIGN.md) | 架构与契约（英文）：技术栈、目录分工、网络协议、渲染与 UI、各次试玩后的规则修订 |
 | [docs/SIM.md](docs/SIM.md) | 战斗模拟引擎参考（英文）：钩子、技能描述格式、职业默认行为 |

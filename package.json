@@ -33,7 +33,10 @@
     "setup": "node tools/setup.mjs",
     "doctor": "node tools/doctor.mjs",
     "admin": "node tools/admin.mjs",
-    "launch": "node scripts/launch.mjs"
+    "launch": "node scripts/launch.mjs",
+    "desktop:prepare": "node tools/prepare-tauri.mjs",
+    "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:build": "npm --prefix desktop run build"
   },
   "engines": {
     "node": ">=22"

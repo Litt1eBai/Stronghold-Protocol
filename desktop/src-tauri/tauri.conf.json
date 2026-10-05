@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stronghold Protocol",
+  "version": "0.1.3",
+  "identifier": "com.strongholdprotocol.client",
+  "build": {
+    "beforeBuildCommand": "node ../tools/prepare-tauri.mjs",
+    "beforeDevCommand": "node ../tools/prepare-tauri.mjs",
+    "frontendDist": "../web"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "卫戍协议：盟约",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "固定服务器地址的卫戍协议桌面客户端",
+    "longDescription": "Stronghold Protocol desktop client with bundled web assets."
+  }
+}
