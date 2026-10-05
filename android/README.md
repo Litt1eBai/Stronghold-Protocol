@@ -4,9 +4,9 @@ This is a fixed-endpoint WebView wrapper. It intentionally has no server address
 complete `public/` web client, including `public/assets` and `public/fonts` when present, is
 copied into the APK during the Gradle build. The fixed URL is used only for WebSocket/API traffic.
 
-Open the `android/` directory in Android Studio, set the `serverUrl` Gradle property to the
-fixed HTTPS origin, and build the `app` release variant. On a machine with the Android SDK and
-Gradle installed directly:
+Run the setup step from the repository root first, then open the `android/` directory in Android
+Studio or build the `app` release variant directly. The Gradle task refuses to build when
+`public/assets` is missing or empty, so an APK cannot be produced accidentally without art/audio.
 
 ```bash
 node tools/setup.mjs --yes

@@ -131,7 +131,7 @@ cloudflared tunnel --url http://localhost:3000
 2. 路由器「虚拟服务器 / 端口转发」：外部端口 3000（或任意端口）→ 内部 `主机IP:3000`，TCP。
 3. 朋友访问 `http://<你的公网 IP>:外部端口`。
 
-注意：游戏没有账号系统，知道地址的人都能进来。服务器对来自互联网的连接有按网络的数量限制（每个网络最多 64 个连接，房间 / 对局数量也有上限），但仍建议不玩时关掉转发，或优先用 Tailscale。
+注意：未设置 `SP_AUTH=required` 时，知道地址的人都能进来；熟人公网服应按第 3.0 节启用封闭账号。服务器对来自互联网的连接有按网络的数量限制（每个网络最多 64 个连接，房间 / 对局数量也有上限），但仍建议不玩时关掉转发，或优先用 Tailscale。
 
 ### 2.4 反向代理与 HTTPS（有域名时）
 
@@ -222,6 +222,67 @@ services:
     environment:
       SP_VERIFY: "off"
 ```
+
+### 3.1 CNB：构建镜像并部署到 VPS
+
+CNB 的构建节点负责执行 Dockerfile、安装依赖和生成镜像；线上游戏仍需要一个**长时间运行的容器服务**，并且必须支持 WebSocket。不要把 CNB 的构建节点规格当成游戏运行时规格：小团体建议运行时从 2 vCPU / 1 GB 内存起步。
+
+仓库已有生产用 `Dockerfile`。在 CNB 项目中选择从仓库构建 Docker 镜像，构建上下文使用仓库根目录；需要把素材打进镜像时开启 `FETCH_ASSETS=1`：
+
+```text
+Dockerfile: Dockerfile
+构建参数: FETCH_ASSETS=1
+监听端口: 3000/TCP
+```
+
+素材下载约 250–270 MB，构建时间取决于 CNB 节点和下载线路。镜像构建完成后，将镜像推送到 CNB 镜像仓库或其他容器镜像仓库，再创建一个常驻服务运行它。线上服务需要设置：
+
+```env
+PORT=3000
+HOST=0.0.0.0
+SP_COMBAT=client
+SP_VERIFY=sample
+SP_AUTH=required
+SP_AUTH_SECRET=随机生成的长密钥
+SP_ACCOUNTS_FILE=/data/accounts.json
+```
+
+账号文件必须挂载到持久化磁盘；否则容器重建后账号会丢失。至少挂载：
+
+```text
+/data  → 持久化卷
+```
+
+如果 CNB 的部署环境不提供持久化卷，可以把账号文件放到外部数据库或在每次发布前恢复备份；不要把 `SP_AUTH_SECRET` 和账号文件提交进 Git。服务启动后检查 `https://你的域名/healthz`，应返回 200；反向代理必须转发 `/ws` 的 WebSocket 升级，并把服务部署在域名根路径。
+
+线上更新流程：构建新镜像 → 停止旧版本 → 替换服务镜像 → 确认 `/healthz` → 再通知玩家。重启会结束内存中的房间和正在进行的对局，因此不要在一局进行中直接滚动更新。
+
+### 3.2 Android APK：构建、签名与分发
+
+Android 工程在 `android/`。它把完整的 `public/`、`shared/`、`data/` 和浏览器战斗所需的 `server/sim/` 复制进 APK；APK 启动后从本地资源加载页面，只把固定的 HTTPS 地址用于 WebSocket / API。服务器地址没有输入框，修改地址必须重新构建 APK。
+
+构建前先准备前端库和素材（素材目录被 `.gitignore` 排除，不会从 Git 自动得到）：
+
+```bash
+node tools/setup.mjs --yes
+```
+
+然后在安装了 Android SDK、Android build-tools 和 Gradle 的环境中构建 release 包：
+
+```bash
+cd android
+gradle assembleRelease -PserverUrl=https://game.example.com
+```
+
+输出文件：
+
+```text
+android/app/build/outputs/apk/release/app-release.apk
+```
+
+Gradle 会在构建时检查 `public/assets` 是否存在且非空；没有完整素材时构建会失败，不会生成缺素材的可分发包。正式分发前应使用自己的签名密钥签名 APK，并保存好 keystore；不要把 keystore、密码或服务器账号密码提交到仓库。Android Studio 用户也可以直接打开 `android/`，选择 `app` 的 `release` 变体，并在 Gradle 参数中加入 `-PserverUrl=https://game.example.com`。
+
+熟人分发建议只发 APK，不发服务器管理员凭据；账号由服务器管理员用 `node tools/admin.mjs` 单独创建。服务器必须已经启用 HTTPS，APK 才能正常使用 `wss://` 长连接。
 
 ## 4. macOS / Linux 常驻
 
