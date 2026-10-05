@@ -1,7 +1,71 @@
 # 部署指南
 
-目标：在一台家用 Windows 小主机上长期开服，让朋友通过局域网或公网来玩。macOS / Linux / Docker 放在后面。
+目标：把游戏服务部署到家用电脑、Linux VPS、Docker 或 CNB 等能运行常驻 Node.js 服务的环境，让朋友通过局域网或公网来玩。后面的 Windows、Docker、CNB 和 Linux 小节只是不同平台的具体做法。
 所有命令都在项目根目录执行。遇到问题先运行 `node tools/doctor.mjs`（只读诊断）。
+
+## 0.1 通用部署流程
+
+无论选择哪种平台，都按下面的顺序部署。平台差异只在「如何安装依赖、如何保持进程常驻、如何配置 HTTPS」这三处。
+
+### 0.1.1 准备程序与素材
+
+从 Git 仓库检出指定版本，或使用已经包含依赖和素材的完整包。源码部署时执行：
+
+```bash
+npm ci
+node tools/setup.mjs --yes
+node tools/doctor.mjs
+```
+
+`setup` 会复制浏览器依赖并准备 `public/assets`、`public/fonts` 等素材；素材目录没有提交到 Git，需要在构建机或服务器上单独准备。Docker / CNB 可以在镜像构建阶段用 `FETCH_ASSETS=1` 下载，APK 则必须在构建 APK 前准备好素材。
+
+### 0.1.2 配置服务
+
+开发或局域网测试可以直接使用默认配置。熟人公网服建议使用以下配置：
+
+```env
+HOST=127.0.0.1
+PORT=3000
+SP_COMBAT=client
+SP_VERIFY=sample
+SP_AUTH=required
+SP_AUTH_SECRET=随机生成的长密钥
+SP_ACCOUNTS_FILE=/data/accounts.json
+```
+
+`HOST=127.0.0.1` 适用于前面有 Caddy / Nginx 的部署；没有反向代理、需要局域网直连时改为 `0.0.0.0`。账号文件和 `SP_AUTH_SECRET` 不要提交到仓库，账号文件应放在持久化目录。
+
+### 0.1.3 启动并验证
+
+先在本机或内网验证服务能启动：
+
+```bash
+npm start
+curl http://127.0.0.1:3000/healthz
+```
+
+健康检查返回 200 后，再配置进程管理器、容器重启策略或 systemd。这个服务是单个常驻 Node.js 进程，房间和对局保存在内存中；重启会结束正在进行的对局。
+
+### 0.1.4 配置公网访问
+
+公网部署建议使用域名和 HTTPS：
+
+```text
+玩家浏览器 / APK  →  HTTPS / WSS 反向代理  →  Node.js:3000
+```
+
+代理必须转发 `/ws` WebSocket 升级，并把站点部署在域名根路径；`/data/`、`/shared/`、`/sim/` 和 `/vendor/` 等路径不能被改写到子路径。代理配置完成后，用 `https://域名/healthz` 检查，再从另一台设备实际登录和创建房间。
+
+### 0.1.5 创建账号并分发客户端
+
+服务确认可用后，在服务器上创建熟人账号：
+
+```bash
+node tools/admin.mjs user create alice '至少八位的密码' 爱丽丝
+node tools/admin.mjs user list
+```
+
+APK 构建时把服务器地址固定为同一个 HTTPS 域名；构建完成后只向熟人分发 APK 和各自账号，不分发 `SP_AUTH_SECRET` 或管理员凭据。APK 的构建和签名见第 3.2 节。
 
 ## 0. 资源需求
 
