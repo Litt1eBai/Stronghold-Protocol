@@ -16,10 +16,12 @@ export function uiUrl(m, key) {
  * @param {any} m manifest
  * @param {any} chess chess.json record (or { assets: { avatar } })
  */
-export function chessAvatarUrl(m, chess) {
+export function chessAvatarUrl(m, chess, opts) {
   const chars = obj(obj(m)?.chars);
   const id = str(chess?.assets?.avatar) || str(chess?.charId);
   if (!chars || !id) return null;
+  const skinArt = chars[chess?.charId]?.skins?.[opts?.skin || chess?.skin]?.avatar;
+  if (skinArt) return str(skinArt);
   if (id.endsWith('_2') && !chars[id]) {
     const base = chars[id.slice(0, -2)];
     return str(base?.avatarE2) || str(base?.avatar);

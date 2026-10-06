@@ -39,7 +39,8 @@
     "desktop:build": "npm --prefix desktop run build",
     "client:dev": "npm --prefix client run dev",
     "client:build": "npm --prefix client run build",
-    "client:android:build": "npm --prefix client run android:build"
+    "client:android:build": "npm --prefix client run android:build",
+    "skins:prepare": "node tools/prepare-skins.mjs"
   },
   "engines": {
     "node": ">=22"

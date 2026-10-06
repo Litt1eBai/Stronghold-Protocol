@@ -34,7 +34,7 @@ android {
         minSdk = 24
         targetSdk = 37
         // Upgrade both the earlier Tauri APK (1003) and the WebView-only APK (1004).
-        versionCode = 1005
+        versionCode = 1006
         versionName = "0.1.3"
         buildConfigField("String", "SERVER_URL", "\"$serverOrigin\"")
         manifestPlaceholders["usesCleartextTraffic"] = (endpoint.scheme == "http").toString()

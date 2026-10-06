@@ -19,6 +19,7 @@
 
 import { render } from '../../vendor/preact.module.js';
 import { html, TierChip } from './components.js';
+import { avatarUrl } from '../assets.js';
 import { GEO } from '../../../shared/constants.js';
 import { chessAvatarUrl, itemIconUrl, tokenAvatarUrl, enemyIconUrl } from './assetUrls.js';
 import { tileKey, hasFlag, UF, penPlacement, PEN, fieldTile } from './gameLogic.js';
@@ -33,6 +34,10 @@ function unitArt(m, info) {
   if (!m || !id) return null;
   if (info.side === 'enemy' || String(id).startsWith('enemy_')) return enemyIconUrl(m, id);
   if (String(id).startsWith('token_')) return tokenAvatarUrl(m, id);
+  if (info.skin) {
+    const skinArt = avatarUrl(m, id, { skin: info.skin });
+    if (skinArt) return skinArt;
+  }
   const chars = m.chars || {};
   if (chars[id]?.avatar) return chars[id].avatar;
   if (String(id).endsWith('_2') && chars[id.slice(0, -2)]) return chars[id.slice(0, -2)].avatarE2 || chars[id.slice(0, -2)].avatar;
@@ -123,7 +128,7 @@ export function createFallbackView(host, opts = {}) {
     const mm = m();
     if (p.kind === 'item') return itemIconUrl(mm, lookup('items', p.id));
     if (p.kind === 'token') return tokenAvatarUrl(mm, p.id);
-    return chessAvatarUrl(mm, lookup('chess', p.id));
+    return chessAvatarUrl(mm, lookup('chess', p.id), { skin: p.skin });
   }
   function pieceName(p) {
     if (p.kind === 'item') return lookup('items', p.id)?.name || '道具';

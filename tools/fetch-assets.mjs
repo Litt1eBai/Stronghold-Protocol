@@ -39,6 +39,7 @@ import { buildPlan } from './assets/plan.mjs';
 import { processModels, findLocalEnemyModels, localEnemySpineMeta, loadLocalEnemySpines, LOCAL_ENEMY_SPINES_FILE } from './assets/spine.mjs';
 import { collectLeaves, downloadLeaves, resolveTemplate, totalBytes, contentHash, droppedEntries, MANIFEST_VERSION } from './assets/manifest.mjs';
 import { fontJobs, buildFonts } from './assets/fonts.mjs';
+import { addSkinAssets } from './prepare-skins.mjs';
 import { skelParserAvailable } from './assets/skel.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -150,6 +151,7 @@ function countStats(m, bytes, files) {
   return {
     files,
     bytes,
+    skins: vals(m.chars).reduce((n, c) => n + Object.keys(c.skins || {}).length, 0),
     chars: Object.keys(m.chars || {}).length,
     charsWithBack: vals(m.chars).filter((c) => c.spine?.back).length,
     enemies: Object.keys(m.enemies || {}).length,
@@ -280,10 +282,15 @@ async function main() {
   // Manifest
   const resolved = resolveTemplate(plan.template, { root: ASSETS, spine: spine.entries, sourceOf: (rel) => dl.ledger.files[rel]?.url });
   const body = resolved.value;
+  await addSkinAssets(body, { offline: opts.offline });
   tidyManifest(body);
   const fontFaces = {};
   for (const [name, f] of Object.entries(fonts.files)) fontFaces[name] = f;
   body.fonts = existsSync(join(FONTS, 'fonts.css')) ? { css: '/fonts/fonts.css', faces: fontFaces } : { faces: fontFaces };
+  for (const char of Object.values(body.chars || {})) for (const skin of Object.values(char.skins || {})) {
+    resolved.files.add(skin.avatar.replace(/^\/assets\//, ''));
+    for (const sp of Object.values(skin.spine || {})) for (const url of [sp.skel, sp.atlas, ...sp.textures]) resolved.files.add(url.replace(/^\/assets\//, ''));
+  }
   const bytes = totalBytes(ASSETS, resolved.files);
   const manifest = {
     version: MANIFEST_VERSION,
