@@ -13,14 +13,14 @@ const parseQqAllowlist = (value) => new Set(String(value || '').split(/[\s,;]+/)
 
 function loadQqAllowlist(file) {
   try {
-    const raw = fs.readFileSync(file, 'utf8');
-    try {
+    const raw = fs.readFileSync(file, 'utf8').replace(/^\ufeff/, '').trim();
+    if (/^[\[{]/.test(raw)) {
       const parsed = JSON.parse(raw);
       const list = Array.isArray(parsed) ? parsed : parsed?.qq || parsed?.allowedQq || [];
       return parseQqAllowlist(Array.isArray(list) ? list.join(' ') : list);
-    } catch {
-      return parseQqAllowlist(raw);
     }
+    // One QQ per line; comments may follow an entry. Never treat numbers in comments as QQs.
+    return parseQqAllowlist(raw.split(/\r?\n/).map((line) => line.replace(/#.*$/, '')).join('\n'));
   } catch { return new Set(); }
 }
 
@@ -59,6 +59,7 @@ export class AuthStore {
     this.required = !!required;
     this.registration = /^(1|true|on|invite|open)$/i.test(String(registration));
     this.allowedQqFile = path.resolve(allowedQqFile);
+    this.qqFileBacked = allowedQq == null;
     this.allowedQq = allowedQq instanceof Set ? new Set([...allowedQq].filter(validQq))
       : allowedQq != null ? parseQqAllowlist(allowedQq) : loadQqAllowlist(this.allowedQqFile);
     if (this.required && !this.secret) throw new Error('SP_AUTH_SECRET is required when SP_AUTH=required');
@@ -85,8 +86,14 @@ export class AuthStore {
 
   enabled() { return this.required; }
   count() { return this.users.size; }
-  registrationEnabled() { return this.required && this.registration && this.allowedQq.size > 0; }
-  qqAllowed(qq) { return validQq(qq) && this.allowedQq.has(normalizeQq(qq)); }
+  // Read at admission time: handles append, edits and atomic file replacement without watchers
+  // or a restart. Missing/unreadable/malformed files fail closed; existing accounts are unaffected.
+  reloadQqAllowlist() {
+    if (this.qqFileBacked) this.allowedQq = loadQqAllowlist(this.allowedQqFile);
+    return this.allowedQq;
+  }
+  registrationEnabled() { return this.required && this.registration && this.reloadQqAllowlist().size > 0; }
+  qqAllowed(qq) { return validQq(qq) && this.reloadQqAllowlist().has(normalizeQq(qq)); }
 
   createUser({ username, password, displayName = username, role = 'member' }) {
     const name = String(username || '').trim().toLowerCase();

@@ -117,7 +117,7 @@ npm start          # 启动服务器：http://localhost:3000
 | `SP_AUTH` | `off` | 设为 `required` 开启账号登录 |
 | `SP_AUTH_SECRET` | 空 | JWT 签名密钥；开启账号时必须设置 |
 | `SP_REGISTRATION` | `off` | 设为 `on` 开启前端注册；还必须配置 QQ 白名单文件 |
-| `SP_ALLOWED_QQ_FILE` | `.cache/allowed-qq.json` | QQ 白名单文件；支持 JSON 数组、`{"qq":[...]}` 或每行一个 QQ |
+| `SP_ALLOWED_QQ_FILE` | `.cache/allowed-qq.json` | QQ 白名单文件；推荐每行一个 QQ，支持 `#` 注释；兼容 JSON 数组和 `{"qq":[...]}`，修改立即生效 |
 | `SP_ACCOUNTS_FILE` | `.cache/accounts.json` | 账号数据文件路径 |
 
 公网熟人服可以开启账号和 QQ 白名单注册：设置 `SP_AUTH=required`、随机的 `SP_AUTH_SECRET`、`SP_REGISTRATION=on`，并在 `.cache/allowed-qq.json` 写入 QQ 列表，例如 `["12345678", "23456789"]`。注册成功后客户端保存 7 天有效的 JWT，期间再次打开无需重新登录；JWT 过期后重新登录即可。账号文件默认位于 `.cache/accounts.json`，请备份并限制文件权限。若不希望开放注册，只保留 `SP_REGISTRATION=off`，继续使用管理员命令创建账号。

@@ -248,11 +248,28 @@ https / wss 说明：页面通过 https 打开时客户端自动连接 `wss://�
 export SP_AUTH=required
 export SP_AUTH_SECRET="$(openssl rand -hex 32)"
 export SP_REGISTRATION=on
+export SP_ALLOWED_QQ_FILE=.cache/allowed-qq.txt
 mkdir -p .cache
-printf '["12345678", "23456789"]\n' > .cache/allowed-qq.json
+printf '12345678\n23456789\n' > .cache/allowed-qq.txt
 ```
 
-客户端登录后会保存一枚 7 天有效的 HS256 JWT，同一设备在有效期内再次打开不需要重复登录。QQ 白名单从 `SP_ALLOWED_QQ_FILE` 指向的文件读取，支持 JSON 数组、`{"qq":[...]}` 或每行一个 QQ；注册时必须填写其中一个 QQ 号，同一个 QQ 号只能注册一次。默认文件是 `.cache/allowed-qq.json`，变更白名单后重启服务即可生效。注册密码不再限制最小长度，但不能为空。
+客户端登录后会保存一枚 7 天有效的 HS256 JWT，同一设备在有效期内再次打开不需要重复登录。QQ 白名单从 `SP_ALLOWED_QQ_FILE` 指向的文件读取，推荐每行一个 QQ，支持空行和 `#` 注释；兼容 JSON 数组和 `{"qq":[...]}`。注册时必须填写其中一个 QQ 号，同一个 QQ 号只能注册一次。默认路径仍为 `.cache/allowed-qq.json` 以兼容已有部署，文件内容也可直接改成文本列表。注册密码不再限制最小长度，但不能为空。
+
+白名单在注册校验和注册配置查询时重新读取；追加、删除或替换文件后，下一次请求立即生效，不需要重启，也不会中断对局。文件不存在、无法读取或 JSON 损坏时拒绝新注册，修复文件后自动恢复。移除 QQ 不会禁用已有账号。修改 `SP_ALLOWED_QQ_FILE` 路径本身仍需重启；Docker / CNB 建议挂载白名单所在的持久化目录，避免单文件挂载在原子替换后仍指向旧文件。
+
+```text
+# 熟人名单
+12345678 # Alice
+23456789 # Bob
+```
+
+追加一个 QQ：
+
+```bash
+printf '\n34567890\n' >> .cache/allowed-qq.txt
+```
+
+名单只放在服务端受限目录，不要放到 `public/` 或客户端安装包。注意：填写白名单中的 QQ 号并不证明用户拥有该 QQ；需要防止冒用时，应另加邀请码或身份验证。
 
 如果不希望开放注册，保持 `SP_REGISTRATION=off`，只有能登录服务器主机的管理员可以创建、启用或禁用账号：
 
