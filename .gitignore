@@ -14,6 +14,13 @@ client/web/
 client/src-tauri/target/
 client/src-tauri/gen/
 client/node_modules/
+client/artifacts/
+client/android/.gradle/
+client/android/.kotlin/
+client/android/app/.cxx/
+client/android/build/
+client/android/app/build/
+client/android/local.properties
 # tools/local-extract/extract.py → public/assets/local/** and this per-machine manifest
 # (optional: the client and the tests work without it; docs/DEPLOY.md §6 lists what falls back)
 data/local-assets.json

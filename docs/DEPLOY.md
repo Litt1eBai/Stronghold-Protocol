@@ -369,28 +369,26 @@ Gradle 会在构建时检查 `public/assets` 是否存在且非空；没有完�
 
 熟人分发建议只发 APK，不发服务器管理员凭据；账号由服务器管理员用 `node tools/admin.mjs` 单独创建。服务器必须已经启用 HTTPS，APK 才能正常使用 `wss://` 长连接。
 
-### 3.3 Tauri 2 统一桌面 / Android 客户端
+### 3.3 固定地址桌面 / Android 客户端
 
-统一客户端工程在 `client/`，使用 Tauri 2，复用浏览器版前端，同时把 `public/`、`shared/`、`data/` 和 `server/sim/` 封装进桌面安装包或 Android APK。它不启动本地游戏服务器，只通过编译时写入的 `SP_SERVER_URL` 连接远端 HTTPS / WSS 服务。
+客户端工程在 `client/`。桌面端使用 Tauri 2，封装现有前端与资源；安卓端使用 `client/android/` 的 Kotlin + WebView 壳，加载服务器页面，并预装 `public/assets/` 的图片、动画、音频及 `public/fonts/` 的字体。两者都通过打包时的 `SP_SERVER_URL` 固定服务器地址，沿用现有注册、登录、账号会话和进度。安卓资源直接从 APK 读取，无需首次下载或解压；缺少的资源从服务器加载。网页和游戏数据仍随服务器更新，不启动本地服务器。
 
-在 Windows 原生环境构建最省事：安装 Rust、Visual Studio C++ Build Tools、WebView2 开发环境和 Node.js 22+，然后执行：
+在 Windows 原生环境执行：
 
 ```powershell
-npm ci
+# 桌面端先准备 Node/Rust/MSVC、npm 依赖和完整素材；安卓单独构建只需要 JDK/SDK。
+npm.cmd ci
 node tools/setup.mjs --yes
-cd client
-npm install
-$env:SP_SERVER_URL = "https://game.example.com"
-npm run build
+npm.cmd --prefix client ci
+.\scripts\build-client-windows.ps1 -ServerUrl http://203.135.99.28:30089
+
+# 只构建并签名安卓端：
+.\scripts\build-client-windows.ps1 -Target Android -ServerUrl http://203.135.99.28:30089
 ```
 
-初始化 Android 工程（只需执行一次）：
+安卓需要 JDK 21、Android SDK Platform 37、Build Tools 36 或更高，以及完整的本地静态资产，无需 Rust/NDK 或初始化生成工程。Gradle 打包前校验素材清单，缺资源会终止构建。HTTP 地址使用 HTTP/WS，HTTPS 地址使用 HTTPS/WSS。服务器地址改变后需重新构建客户端。替换已预装的同名素材需要更新 APK，或在服务器资源 URL 添加版本查询参数以改走服务器。
 
-```powershell
-npm run android:init
-```
-
-Windows / macOS / Linux 安装包位于 `client/src-tauri/target/release/bundle/`；Android APK / AAB 使用 `npm run android:build` 构建。桌面客户端和 Android APK 使用同一个服务器地址与账号系统；服务器地址改变后，两种客户端都需要重新构建。正式分发前要配置代码签名，签名证书和私钥只保存在发布机，不提交到 Git。
+产物在 `client/artifacts/windows/` 和 `client/artifacts/android/Stronghold-Protocol-release.apk`。默认沿用 `.cache/client-signing/` 中的 release 密钥；后续更新必须保留同一密钥，密钥及密码不提交到 Git。安卓按系统返回键进入原生画质设置、日志诊断和刷新菜单。完整构建配置与旧版升级说明见 [client/README.md](../client/README.md)。
 
 ## 4. macOS / Linux 常驻
 

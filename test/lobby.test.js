@@ -348,7 +348,7 @@ describe('static http server', () => {
 
     const post = await httpReq(srv.port, '/', { method: 'POST' });
     assert.equal(post.status, 405);
-    assert.equal(post.headers.allow, 'GET, HEAD');
+    assert.equal(post.headers.allow, 'GET, HEAD, POST');
 
     const bare = await httpReq(srv.port, '/data');
     assert.equal(bare.status, 301);

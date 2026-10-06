@@ -123,12 +123,20 @@ export function defaultHttpOrigin(loc = globalThis.location) {
 
 /** Register an account through the server's allowlisted registration endpoint. */
 export async function registerAccount(fields, fetchFn = globalThis.fetch) {
-  const res = await fetchFn(`${defaultHttpOrigin()}/api/auth/register`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(fields), credentials: 'same-origin',
-  });
+  const invoke = globalThis.__TAURI__?.core?.invoke;
+  let res;
   let body = null;
-  try { body = await res.json(); } catch { /* malformed server response */ }
+  if (typeof invoke === 'function') {
+    const result = await invoke('register_account', { fields });
+    res = { status: result.status, ok: result.status >= 200 && result.status < 300 };
+    body = result.body;
+  } else {
+    res = await fetchFn(`${defaultHttpOrigin()}/api/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(fields), credentials: 'same-origin',
+    });
+    try { body = await res.json(); } catch { /* malformed server response */ }
+  }
   if (!res.ok || !body?.ok) {
     const code = body?.error || (res.status === 403 ? 'REGISTRATION_DISABLED' : 'INTERNAL');
     const text = {

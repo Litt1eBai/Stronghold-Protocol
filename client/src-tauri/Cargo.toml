@@ -5,11 +5,17 @@ description = "Stronghold Protocol unified Tauri client"
 authors = ["Stronghold Protocol contributors"]
 edition = "2021"
 
+[lib]
+name = "stronghold_protocol_client_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+serde_json = "1"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
