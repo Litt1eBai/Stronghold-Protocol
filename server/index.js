@@ -39,7 +39,7 @@ import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { Network, SessionRegistry, NET_DEFAULTS } from './net.js';
+import { Network, SessionRegistry, NET_DEFAULTS, clientAddress } from './net.js';
 import { Lobby } from './lobby.js';
 import { getData, loadData } from './data.js';
 import { PROTOCOL_VERSION, APP_VERSION } from '../shared/constants.js';
@@ -329,6 +329,24 @@ function sendJson(req, res, status, obj) {
   const body = Buffer.from(JSON.stringify(obj));
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   res.end(req.method === 'HEAD' ? undefined : body);
+}
+
+/** Read a small JSON request body without buffering unbounded input. */
+function readJsonBody(req, maxBytes = 16 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) { reject(Object.assign(new Error('body too large'), { code: 'BODY_TOO_LARGE' })); req.destroy(); return; }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); }
+      catch { reject(Object.assign(new Error('invalid json'), { code: 'BAD_JSON' })); }
+    });
+    req.on('error', reject);
+  });
 }
 
 /** Split an absolute request URL into raw path + query (also accepts absolute-form URLs). */
@@ -637,6 +655,15 @@ export async function startServer(opts = {}) {
   const lobby = new Lobby({ registry, log, MatchClass: opts.MatchClass, getData: () => data, seedFn: opts.seedFn, options: lobbyOptions });
   const auth = opts.auth || new AuthStore({ required: authMode() === 'required', log });
   const network = new Network({ registry, handler: lobby, auth, log, options: netOptions });
+  const registrationBuckets = new Map();
+  const allowRegistrationAttempt = (req) => {
+    const key = clientAddress(req, netOptions.trustProxy).key || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const cur = registrationBuckets.get(key);
+    if (!cur || now - cur.startedAt >= 10 * 60_000) { registrationBuckets.set(key, { startedAt: now, count: 1 }); return true; }
+    cur.count += 1;
+    return cur.count <= 10;
+  };
   const serveStatic = createStaticHandler({ publicDir, dataDir, sharedDir, log });
   const startedAt = Date.now();
   // The tag is per process (see buildTag): read the browser runtime once, here, not on every /healthz.
@@ -657,8 +684,35 @@ export async function startServer(opts = {}) {
     if (url.length > MAX_URL_LENGTH) { sendError(req, res, 414, '请求地址过长 · URI too long'); return; }
     const parts = splitUrl(url);
     if (!parts) { sendError(req, res, 400, '请求地址无效 · Bad request'); return; }
+    if (parts.rawPath === '/api/auth/config' && (req.method === 'GET' || req.method === 'HEAD')) {
+      sendJson(req, res, 200, { authRequired: auth.enabled(), registration: auth.registrationEnabled() });
+      return;
+    }
+    if (parts.rawPath === '/api/auth/register' && req.method === 'POST') {
+      if (!auth.registrationEnabled()) { sendJson(req, res, 403, { ok: false, error: 'REGISTRATION_DISABLED' }); return; }
+      if (!allowRegistrationAttempt(req)) { sendJson(req, res, 429, { ok: false, error: 'RATE' }); return; }
+      let body;
+      try { body = await readJsonBody(req); } catch (e) {
+        sendJson(req, res, e?.code === 'BODY_TOO_LARGE' ? 413 : 400, { ok: false, error: 'BAD_REQUEST' }); return;
+      }
+      const fields = body && typeof body === 'object' ? body : {};
+      const username = typeof fields.username === 'string' ? fields.username : '';
+      const password = typeof fields.password === 'string' ? fields.password : '';
+      const displayName = typeof fields.displayName === 'string' ? fields.displayName : username;
+      const qq = typeof fields.qq === 'string' ? fields.qq : '';
+      try {
+        const account = auth.registerUser({ username, password, displayName, qq });
+        sendJson(req, res, 201, { ok: true, auth: auth.issue(account), account: { username: account.username, displayName: account.displayName, role: account.role } });
+      } catch (e) {
+        const message = String(e?.message || '');
+        const conflict = /already exists|already registered/i.test(message);
+        const invalid = /must be|required|not allowed|registration disabled/i.test(message);
+        sendJson(req, res, conflict ? 409 : invalid ? 400 : 500, { ok: false, error: conflict ? 'ALREADY_EXISTS' : invalid ? 'INVALID_REGISTRATION' : 'INTERNAL' });
+      }
+      return;
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.setHeader('Allow', 'GET, HEAD');
+      res.setHeader('Allow', 'GET, HEAD, POST');
       sendError(req, res, 405, '不支持的请求方法 · Method not allowed');
       return;
     }

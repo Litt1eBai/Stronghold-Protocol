@@ -114,11 +114,13 @@ npm start          # 启动服务器：http://localhost:3000
 | `TRUST_PROXY` | `auto` | 是否信任 `X-Forwarded-For` 等转发头：`auto` 只信任来自本机 / 内网的代理；`1` 总是；`0` 从不 |
 | `DEBUG` | 空 | 设为任意值输出详细日志 |
 | `SP_NO_BROWSER` | 空 | 设为 `1` 时启动脚本不自动打开浏览器 |
-| `SP_AUTH` | `off` | 设为 `required` 开启封闭账号登录（无公开注册） |
-| `SP_AUTH_SECRET` | 空 | 账号 token 签名密钥；开启账号时必须设置 |
+| `SP_AUTH` | `off` | 设为 `required` 开启账号登录 |
+| `SP_AUTH_SECRET` | 空 | JWT 签名密钥；开启账号时必须设置 |
+| `SP_REGISTRATION` | `off` | 设为 `on` 开启前端注册；还必须配置 QQ 白名单文件 |
+| `SP_ALLOWED_QQ_FILE` | `.cache/allowed-qq.json` | QQ 白名单文件；支持 JSON 数组、`{"qq":[...]}` 或每行一个 QQ |
 | `SP_ACCOUNTS_FILE` | `.cache/accounts.json` | 账号数据文件路径 |
 
-公网熟人服可以开启封闭账号：设置 `SP_AUTH=required` 和随机的 `SP_AUTH_SECRET`。账号由管理员在服务器上创建，客户端没有注册入口。创建账号：`SP_AUTH_SECRET=同一串密钥 node tools/admin.mjs user create alice 密码 昵称`；查看、禁用、启用账号见 `node tools/admin.mjs user list|disable|enable <用户名>`。账号文件默认位于 `.cache/accounts.json`，请备份并限制文件权限。
+公网熟人服可以开启账号和 QQ 白名单注册：设置 `SP_AUTH=required`、随机的 `SP_AUTH_SECRET`、`SP_REGISTRATION=on`，并在 `.cache/allowed-qq.json` 写入 QQ 列表，例如 `["12345678", "23456789"]`。注册成功后客户端保存 7 天有效的 JWT，期间再次打开无需重新登录；JWT 过期后重新登录即可。账号文件默认位于 `.cache/accounts.json`，请备份并限制文件权限。若不希望开放注册，只保留 `SP_REGISTRATION=off`，继续使用管理员命令创建账号。
 
 设置方式：macOS / Linux `PORT=8080 npm start`；PowerShell `$env:PORT=8080; npm start`；cmd `set "PORT=8080" && npm start`。健康检查：`GET /healthz`。
 

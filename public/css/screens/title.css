@@ -228,6 +228,8 @@
   background: linear-gradient(90deg, var(--mint-500), transparent 60%);
 }
 .title-login .btn--xl { letter-spacing: .6em; padding-left: calc(.48rem + .3em); }
+.title-login .btn--sm { margin-top: -.02rem; color: var(--text-lo); }
+.title-error { color: #ff9b8f; font-size: .14rem; line-height: 1.4; text-align: center; }
 .title-invite {
   display: flex;
   align-items: center;

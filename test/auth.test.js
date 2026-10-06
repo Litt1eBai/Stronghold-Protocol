@@ -16,3 +16,20 @@ test('closed account store creates, verifies, signs and disables users', () => {
     assert.equal(auth.verify(token), null);
   } finally { try { fs.unlinkSync(file); } catch {} }
 });
+
+test('QQ allowlisted registration creates one account and issues a JWT', () => {
+  const file = `/tmp/stronghold-auth-register-${process.pid}-${Date.now()}.json`;
+  try {
+    const qqFile = `${file}.qq`;
+    fs.writeFileSync(qqFile, JSON.stringify(['12345678', '87654321']));
+    const auth = new AuthStore({ file, secret: 'test-secret', required: true, registration: 'on', allowedQqFile: qqFile });
+    assert.equal(auth.registrationEnabled(), true);
+    const user = auth.registerUser({ username: 'alice', password: 'x', displayName: 'Alice', qq: '12345678' });
+    const token = auth.issue(user);
+    assert.match(token, /^[^.]+\.[^.]+\.[^.]+$/);
+    assert.equal(JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()).typ, 'JWT');
+    assert.equal(auth.verify(token).username, 'alice');
+    assert.throws(() => auth.registerUser({ username: 'bob', password: 'x', qq: '12345678' }), /qq already registered/);
+    assert.throws(() => auth.registerUser({ username: 'bob', password: 'x', qq: '99999999' }), /qq is not allowed/);
+  } finally { try { fs.unlinkSync(file); } catch {} try { fs.unlinkSync(`${file}.qq`); } catch {} }
+});

@@ -112,6 +112,35 @@ export function defaultWsUrl(loc = globalThis.location) {
   return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 }
 
+/** HTTP origin used by account registration (also honors the fixed APK server URL). */
+export function defaultHttpOrigin(loc = globalThis.location) {
+  const fixed = globalThis.__SP_SERVER_URL__;
+  if (typeof fixed === 'string' && fixed.trim()) {
+    try { return new URL(fixed.trim()).origin; } catch { /* fall back to the page origin */ }
+  }
+  return loc?.origin || 'http://localhost:3000';
+}
+
+/** Register an account through the server's allowlisted registration endpoint. */
+export async function registerAccount(fields, fetchFn = globalThis.fetch) {
+  const res = await fetchFn(`${defaultHttpOrigin()}/api/auth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(fields), credentials: 'same-origin',
+  });
+  let body = null;
+  try { body = await res.json(); } catch { /* malformed server response */ }
+  if (!res.ok || !body?.ok) {
+    const code = body?.error || (res.status === 403 ? 'REGISTRATION_DISABLED' : 'INTERNAL');
+    const text = {
+      REGISTRATION_DISABLED: '当前服务器未开放注册', INVALID_REGISTRATION: '注册信息不符合要求',
+      ALREADY_EXISTS: '账号或 QQ 号已注册', INTERNAL: '注册服务暂时不可用', BAD_REQUEST: '注册信息无效',
+      RATE: '注册请求过于频繁，请稍后再试',
+    }[code] || '注册失败';
+    const err = new Error(text); err.code = code; err.status = res.status; throw err;
+  }
+  return body;
+}
+
 const WS_OPEN = 1;
 const WS_CONNECTING = 0;
 
@@ -309,6 +338,20 @@ export class Net {
     this.password = typeof password === 'string' ? password : null;
     if (this.username) this.setName(this.username);
   }
+
+  /** Set a freshly issued JWT and the display name used for the session hello. */
+  authenticate(username, displayName, token) {
+    this.username = typeof username === 'string' ? username.trim() : null;
+    this.password = null;
+    this.authToken = typeof token === 'string' && token ? token : null;
+    try {
+      if (this.authToken) globalThis.localStorage?.setItem('sp.auth', this.authToken);
+      else globalThis.localStorage?.removeItem('sp.auth');
+    } catch { /* storage unavailable */ }
+    this.setName(displayName || username);
+  }
+
+  hasAuthToken() { return typeof this.authToken === 'string' && this.authToken.length > 0; }
 
   _onOpen() {
     this._openedAt = this.now();

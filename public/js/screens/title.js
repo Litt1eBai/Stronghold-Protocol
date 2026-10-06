@@ -13,7 +13,7 @@ import { NAME_MAX_LEN, APP_VERSION } from '../../../shared/constants.js';
 import { html, Button, Icon, MicroLabel, TextField, PingPill } from '../ui/components.js';
 import { GuideButton } from '../ui/guide.js';
 import { toast } from '../ui/toasts.js';
-import { net, identity } from '../net.js';
+import { net, identity, registerAccount } from '../net.js';
 import { store, useStore, shallowEqual } from '../store.js';
 import { data, useData } from '../data.js';
 import { FullscreenButton, detectFeatures } from '../ui/device.js';
@@ -74,6 +74,16 @@ export function enterSession(rawName, password = '') {
   store.set((s) => ({ me: { ...s.me, name }, session: { ...s.session, entered: true } }));
   net.setCredentials(name, password);
   net.setName(name);
+  return true;
+}
+
+function enterRegisteredSession(username, displayName, token) {
+  const name = sanitizeName(displayName || username);
+  if (!name || !token) return false;
+  identity.saveName(name);
+  identity.setEntered(true);
+  store.set((s) => ({ me: { ...s.me, name }, session: { ...s.session, entered: true } }));
+  net.authenticate(username, name, token);
   return true;
 }
 
@@ -185,6 +195,14 @@ export function TitleScreen() {
   const pendingJoin = useStore((s) => s.ui.pendingJoin);
   const [name, setName] = useState(() => store.get().me.name || identity.loadName() || '');
   const [password, setPassword] = useState('');
+  const [registerMode, setRegisterMode] = useState(false);
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerDisplayName, setRegisterDisplayName] = useState('');
+  const [registerQq, setRegisterQq] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirm, setRegisterConfirm] = useState('');
+  const [registerBusy, setRegisterBusy] = useState(false);
+  const [registerError, setRegisterError] = useState('');
   const assetsSettled = useData('assets');
   const assets = data.get('assets');
   const backdrop = findUiAsset(assets, BACKDROP_KEYS);
@@ -203,6 +221,23 @@ export function TitleScreen() {
   const start = () => {
     if (!valid) { toast('请输入博士代号', 'warn'); return; }
     enterSession(name, password);
+  };
+  const submitRegistration = async () => {
+    const username = registerUsername.trim().toLowerCase();
+    const displayName = sanitizeName(registerDisplayName || username);
+    const qq = registerQq.trim();
+    if (!/^[a-z0-9][a-z0-9._-]{1,11}$/.test(username)) { setRegisterError('账号需为 2-12 位小写字母、数字或 . _ -'); return; }
+    if (!/^\d{5,12}$/.test(qq)) { setRegisterError('请输入有效 QQ 号'); return; }
+    if (!displayName) { setRegisterError('请输入昵称'); return; }
+    if (!registerPassword) { setRegisterError('请输入密码'); return; }
+    if (registerPassword !== registerConfirm) { setRegisterError('两次输入的密码不一致'); return; }
+    setRegisterBusy(true); setRegisterError('');
+    try {
+      const result = await registerAccount({ username, displayName, qq, password: registerPassword });
+      enterRegisteredSession(username, result.account?.displayName || displayName, result.auth);
+    } catch (err) {
+      setRegisterError(err?.message || '注册失败，请稍后重试');
+    } finally { setRegisterBusy(false); }
   };
 
   const online = conn.status === 'online' || conn.status === 'connected';
@@ -251,12 +286,28 @@ export function TitleScreen() {
           <${Icon} name="key" />
           <span>收到同盟邀请</span><b class="num">${pendingJoin}</b><span class="t-lo">· 输入代号后将自动加入</span>
         </div>` : null}
-        <${TextField} label="账号 / 博士代号" micro="ACCOUNT / CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
-          placeholder="封闭服务器输入账号，否则输入代号" autoFocus=${!touchUi}
-          onInput=${setName} onEnter=${start} />
-        <${TextField} label="密码" micro="PASSWORD" size="lg" icon="lock" type="password"
-          value=${password} maxLength=${256} placeholder="封闭服务器必填，匿名模式可留空" onInput=${setPassword} onEnter=${start} />
-        <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" disabled=${!valid} onClick=${start}>开始<//>
+        ${registerMode ? html`
+          <${TextField} label="账号" micro="USERNAME" size="lg" icon="user" value=${registerUsername} maxLength=${12}
+            autoFocus=${!touchUi} onInput=${setRegisterUsername} onEnter=${submitRegistration} />
+          <${TextField} label="昵称" micro="DISPLAY NAME" size="lg" icon="user" value=${registerDisplayName} maxLength=${NAME_MAX_LEN}
+            onInput=${setRegisterDisplayName} onEnter=${submitRegistration} />
+          <${TextField} label="QQ 号" micro="QQ NUMBER" size="lg" icon="key" value=${registerQq} maxLength=${12}
+            onInput=${setRegisterQq} onEnter=${submitRegistration} />
+          <${TextField} label="密码" micro="PASSWORD" size="lg" icon="lock" type="password" value=${registerPassword} maxLength=${256}
+            onInput=${setRegisterPassword} onEnter=${submitRegistration} />
+          <${TextField} label="确认密码" micro="CONFIRM PASSWORD" size="lg" icon="lock" type="password" value=${registerConfirm} maxLength=${256}
+            onInput=${setRegisterConfirm} onEnter=${submitRegistration} />
+          ${registerError ? html`<div class="title-error">${registerError}</div>` : null}
+          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" loading=${registerBusy} onClick=${submitRegistration}>注册并进入<//>
+          <${Button} variant="ghost" size="sm" block=${true} disabled=${registerBusy} onClick=${() => { setRegisterMode(false); setRegisterError(''); }}>返回登录<//>
+        ` : html`
+          <${TextField} label="账号 / 博士代号" micro="ACCOUNT / CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
+            autoFocus=${!touchUi} onInput=${setName} onEnter=${start} />
+          <${TextField} label="密码" micro="PASSWORD" size="lg" icon="lock" type="password"
+            value=${password} maxLength=${256} onInput=${setPassword} onEnter=${start} />
+          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" disabled=${!valid} onClick=${start}>开始<//>
+          <${Button} variant="ghost" size="sm" block=${true} onClick=${() => { setRegisterMode(true); setRegisterError(''); }}>注册账号<//>
+        `}
         <div class="title-conn">
           <span class=${`status-dot ${dotClass}`}></span>
           <span>${STATUS_TEXT[conn.status] || conn.status}</span>

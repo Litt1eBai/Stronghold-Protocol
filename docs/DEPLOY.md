@@ -61,7 +61,7 @@ curl http://127.0.0.1:3000/healthz
 服务确认可用后，在服务器上创建熟人账号：
 
 ```bash
-node tools/admin.mjs user create alice '至少八位的密码' 爱丽丝
+node tools/admin.mjs user create alice '自定义密码' 爱丽丝
 node tools/admin.mjs user list
 ```
 
@@ -240,17 +240,21 @@ https / wss 说明：页面通过 https 打开时客户端自动连接 `wss://�
 
 ## 3. Docker
 
-### 3.0 封闭账号（熟人分发）
+### 3.0 账号与 QQ 白名单注册（熟人分发）
 
 账号系统默认关闭以兼容源码开发；公网部署建议打开：
 
 ```bash
 export SP_AUTH=required
 export SP_AUTH_SECRET="$(openssl rand -hex 32)"
-node tools/admin.mjs user create alice '至少八位的密码' 爱丽丝
+export SP_REGISTRATION=on
+mkdir -p .cache
+printf '["12345678", "23456789"]\n' > .cache/allowed-qq.json
 ```
 
-没有注册接口，只有能登录服务器主机的管理员可以创建、启用或禁用账号：
+客户端登录后会保存一枚 7 天有效的 HS256 JWT，同一设备在有效期内再次打开不需要重复登录。QQ 白名单从 `SP_ALLOWED_QQ_FILE` 指向的文件读取，支持 JSON 数组、`{"qq":[...]}` 或每行一个 QQ；注册时必须填写其中一个 QQ 号，同一个 QQ 号只能注册一次。默认文件是 `.cache/allowed-qq.json`，变更白名单后重启服务即可生效。注册密码不再限制最小长度，但不能为空。
+
+如果不希望开放注册，保持 `SP_REGISTRATION=off`，只有能登录服务器主机的管理员可以创建、启用或禁用账号：
 
 ```bash
 node tools/admin.mjs user list

@@ -328,7 +328,8 @@ async function boot() {
 
   const pendingJoin = parseRoomParam(location.search);
   const savedName = sanitizeName(identity.loadName());
-  const entered = identity.wasEntered() && !!savedName;
+  // A valid persisted JWT keeps the account session across browser restarts for its seven-day lifetime.
+  const entered = !!savedName && (identity.wasEntered() || net.hasAuthToken());
   store.set((s) => ({
     me: { ...s.me, name: savedName },
     session: { entered },
