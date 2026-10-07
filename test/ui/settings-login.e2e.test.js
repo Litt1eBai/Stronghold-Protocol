@@ -38,9 +38,43 @@ test('settings are available after login, including Android adaptation of older 
         // without replacing that server's account or settings implementation.
         await page.evaluate(() => document.querySelector('.lobby-settings').remove());
         await page.waitForSelector('.sp-shell-settings', { visible: true });
+        // Simulate the web button arriving after the shell fallback. This was
+        // the login rendering race that left two buttons on the updated server.
+        await page.evaluate(() => {
+          const button = document.createElement('button');
+          button.className = 'lobby-settings'; button.textContent = '设置';
+          document.querySelector('.lobby-screen .topbar__right').appendChild(button);
+        });
+        await page.waitForFunction(() => !document.querySelector('.sp-shell-settings'));
+        assert.equal(await page.$$eval('.lobby-settings, .sp-shell-settings', es => es.length), 1);
+        await page.evaluate(() => document.querySelector('.lobby-settings').remove());
+        await page.waitForSelector('.sp-shell-settings', { visible: true });
         await page.click('.sp-shell-settings');
       } else await page.click('.lobby-settings');
       await page.waitForSelector('.modal .set-range', { visible: true });
+      assert.equal(await page.$('.set-guide'), null, 'settings no longer include a guide button');
+      if (android) {
+        assert.equal(await page.$$eval('.set-hint kbd', es => es.length), 0, 'native Android has no keyboard shortcut description');
+        // The APK also adapts an older served settings modal without requiring
+        // a server deployment: its guide and keyboard-only hint remain hidden.
+        await page.evaluate(() => {
+          const guide = document.createElement('button'); guide.className = 'set-guide'; guide.textContent = '玩法说明';
+          document.querySelector('.modal__actions').prepend(guide);
+          const hint = document.createElement('p'); hint.className = 'set-hint'; hint.innerHTML = '快捷键：<kbd>R</kbd> 刷新';
+          document.querySelector('.set-list').appendChild(hint);
+        });
+        await page.waitForFunction(() => [...document.querySelectorAll('.set-hint')].filter(e => e.querySelector('kbd')).every(e => getComputedStyle(e).display === 'none'));
+        assert.equal(await page.$eval('.set-guide', e => getComputedStyle(e).display), 'none');
+        // The native display entry needs the same late-arrival reconciliation.
+        await page.evaluate(() => {
+          window.savedNativeButton = document.querySelector('.native-display-settings');
+          window.savedNativeButton.remove();
+        });
+        await page.waitForSelector('.sp-shell-display-settings', { visible: true });
+        await page.evaluate(() => document.querySelector('.set-list').prepend(window.savedNativeButton));
+        await page.waitForFunction(() => !document.querySelector('.sp-shell-display-settings'));
+        assert.equal(await page.$$eval('.native-display-settings', es => es.length), 1);
+      }
       await page.$eval('.set-range', el => { el.value = '35'; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.waitForFunction(() => JSON.parse(localStorage.getItem('sp.pref.settings')).bgm === 0.35);
       if (android) {
@@ -52,6 +86,10 @@ test('settings are available after login, including Android adaptation of older 
       await page.waitForFunction(() => !document.querySelector('.modal'));
       await page.evaluate(() => window.__SP__.net.request('room.create', { mode: 'solo', difficulty: 'NORMAL' }));
       await page.waitForSelector('.room-settings', { visible: true });
+      if (android) {
+        await page.waitForFunction(() => !document.querySelector('.sp-shell-settings'));
+        assert.equal(await page.$$eval('.room-settings, .sp-shell-settings', es => es.length), 1);
+      }
       await page.click('.room-settings');
       await page.waitForSelector('.modal .set-range', { visible: true });
       await page.evaluate(() => [...document.querySelectorAll('.modal__actions button')].find(b => b.textContent.trim() === '完成').click());

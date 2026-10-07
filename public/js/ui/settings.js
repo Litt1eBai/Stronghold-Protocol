@@ -7,7 +7,6 @@ import { html, Modal, Button, Icon, MicroLabel } from './components.js';
 import { createStore, useStore, loadPref, savePref } from '../store.js';
 import { sanitizeSettings } from './gameLogic.js';
 import { audio } from '../audio.js';
-import { openGuide } from './guide.js';
 import { detectFeatures } from './device.js';
 
 /** Settings store: { bgm, sfx, voice, muted, damageNumbers, quality }. */
@@ -54,10 +53,9 @@ const QUALITY = [['high', '高'], ['medium', '中'], ['low', '低']];
 export function SettingsModal({ open, onClose }) {
   const s = useSettings();
   const [tested, setTested] = useState(false);
-  const [touchUi] = useState(() => detectFeatures().coarse && !detectFeatures().fine);
+  const [touchUi] = useState(() => Boolean(globalThis.AndroidNative) || (detectFeatures().coarse && !detectFeatures().fine));
   return html`<${Modal} open=${open} onClose=${onClose} title="设置" micro="SETTINGS" width="7.4rem"
-    actions=${html`<${Button} variant="secondary" icon="book" class="set-guide" onClick=${() => openGuide(0)}>玩法说明<//>
-      <${Button} variant="primary" icon="check" onClick=${onClose}>完成<//>`}>
+    actions=${html`<${Button} variant="primary" icon="check" onClick=${onClose}>完成<//>`}>
     <div class="set-list">
       ${globalThis.AndroidNative?.openServerSettings ? html`<${Button} variant="secondary" class="native-display-settings"
         onClick=${() => globalThis.AndroidNative.openServerSettings()}>安卓屏幕设置<//>` : null}

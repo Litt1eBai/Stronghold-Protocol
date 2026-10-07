@@ -66,7 +66,7 @@ Outputs:
 
 The Android APK contains no ABI-specific native libraries and runs on Android 7+
 with a sufficiently recent system WebView. It keeps `com.strongholdprotocol.client`
-and uses version 0.1.4 and version code 1008 (Tauri used 1003, the WebView-only APK used 1004, the first asset bundle used 1005, the skin bundle used 1006, the first 0.1.4 build used 1007). An update
+and uses version 0.1.4 and version code 1009 (Tauri used 1003, the WebView-only APK used 1004, the first asset bundle used 1005, the skin bundle used 1006, the first 0.1.4 build used 1007). An update
 can be installed over that APK with the same key; the change from the bundled
 `tauri.localhost` page to the actual server origin requires logging in again.
 Existing server accounts and progress remain available.
@@ -105,5 +105,7 @@ and a software WebView layer. This also handles older GPU/WebView failures.
 Operator skins use the same web selection, rendering and room synchronization on all clients. See [skins](../docs/SKINS.md); deploy the matching server/web update before using the new APK.
 
 The Android adapter also supplies the lobby/room settings entry on older deployed
-web pages, using their existing settings modal. Connection errors retain retry
+web pages, using their existing settings modal. When the web entry appears, the
+adapter removes its temporary button. Settings omit the guide link, and Android
+shows touch guidance instead of keyboard shortcuts. Connection errors retain retry
 and diagnostics; render failures offer compatibility recovery.

@@ -31,16 +31,25 @@
   const adaptSettings = () => {
     if (!loggedIn()) { closeSettings?.(); return; }
     const header = document.querySelector('.lobby-screen .topbar__right, .room-screen .topbar__right');
-    if (header && !header.querySelector('.lobby-settings, .room-settings, .sp-shell-settings')) {
+    // Login changes the store before Preact commits the new header. A fallback
+    // added in that gap must be removed when the web-owned button arrives.
+    if (header?.querySelector('.lobby-settings, .room-settings')) {
+      header.querySelectorAll('.sp-shell-settings').forEach(button => button.remove());
+    } else if (header && !header.querySelector('.sp-shell-settings')) {
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'btn btn--secondary btn--sm sp-shell-settings';
       button.textContent = '设置'; button.addEventListener('click', openSettings);
       header.prepend(button);
     }
+    document.querySelectorAll('.set-hint').forEach(hint => {
+      hint.classList.toggle('sp-shell-shortcuts', Boolean(hint.querySelector('kbd')));
+    });
     const list = document.querySelector('.set-list');
-    if (list && !list.querySelector('.native-display-settings')) {
+    if (list?.querySelector('.native-display-settings:not(.sp-shell-display-settings)')) {
+      list.querySelectorAll('.sp-shell-display-settings').forEach(button => button.remove());
+    } else if (list && !list.querySelector('.native-display-settings')) {
       const button = document.createElement('button');
-      button.type = 'button'; button.className = 'btn btn--secondary native-display-settings';
+      button.type = 'button'; button.className = 'btn btn--secondary native-display-settings sp-shell-display-settings';
       button.textContent = '安卓屏幕设置';
       button.addEventListener('click', () => window.AndroidNative.openServerSettings());
       list.prepend(button);
@@ -51,7 +60,7 @@
     const style = document.createElement('style');
     // The original five-field registration form exceeds a phone's landscape viewport.
     // Keep the original form and handlers, but allow its content to scroll, including above the keyboard.
-    style.textContent = `.title-settings { display: none !important; }
+    style.textContent = `.title-settings, .set-guide, .sp-shell-shortcuts { display: none !important; }
     @media (max-height: 600px) {
       .title-main { min-height: 0; max-height: calc(100% - .6rem); overflow-y: auto;
         width: 100%; margin-top: 0; padding: .1rem 0; }
