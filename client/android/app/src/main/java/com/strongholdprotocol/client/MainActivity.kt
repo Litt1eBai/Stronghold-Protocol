@@ -40,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("stronghold_shell", Context.MODE_PRIVATE) }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private var focusRequest: AudioFocusRequest? = null
+    private var loggedIn = false
     private var pageReady = false
     private var pageFailed = false
     private var clientState = "尚未收到页面状态"
@@ -72,6 +73,7 @@ class MainActivity : AppCompatActivity() {
         webView.setBackgroundColor(Color.rgb(42, 47, 46))
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
         loading = LinearLayout(this).apply {
+            visibility = View.GONE
             orientation = LinearLayout.VERTICAL
             gravity = android.view.Gravity.CENTER
             setPadding(24, 24, 24, 24)
@@ -80,7 +82,6 @@ class MainActivity : AppCompatActivity() {
         status = TextView(this).apply { setTextColor(Color.WHITE); gravity = android.view.Gravity.CENTER }
         loading.addView(status)
         button(loading, "重试连接") { loadServer() }
-        button(loading, "画质与屏幕设置") { showSettings() }
         button(loading, "查看诊断与日志") { showLogs() }
         root.addView(loading, FrameLayout.LayoutParams(-1, -1))
         webView.settings.apply {
@@ -121,13 +122,13 @@ class MainActivity : AppCompatActivity() {
                     showFailure("页面跳转到了其他服务器，已停止加载")
                     return
                 }
+                loggedIn = false
                 pageReady = false
                 pageFailed = false
                 clientState = "尚未收到页面状态"
                 cancelWatchdog()
                 scheduleWatchdog(30_000L)
-                loading.visibility = View.VISIBLE
-                status.text = "正在连接 ${BuildConfig.SERVER_URL} …"
+                loading.visibility = View.GONE
                 FileLogger.i("webview", "page loading")
             }
             override fun onPageFinished(view: WebView, url: String) {
@@ -172,6 +173,8 @@ class MainActivity : AppCompatActivity() {
     fun loadServer() {
         cancelWatchdog()
         recoveryDialog?.dismiss()
+        loggedIn = false
+        loading.visibility = View.GONE
         pageFailed = false
         pageReady = false
         applyDisplaySettings()
@@ -183,14 +186,15 @@ class MainActivity : AppCompatActivity() {
         val state = try { JSONObject(json) } catch (_: Exception) { return }
         runOnUiThread {
             if (isFinishing || isDestroyed || pageFailed) return@runOnUiThread
+            loggedIn = state.optBoolean("loggedIn")
             clientState = state.toString()
             if (state.has("error")) FileLogger.e("page", state.optString("error"))
             if (state.optBoolean("ready")) {
+                if (!pageReady) FileLogger.i("webview", "original web client ready")
                 pageReady = true
                 cancelWatchdog()
                 loading.visibility = View.GONE
                 recoveryDialog?.dismiss()
-                FileLogger.i("webview", "original web client ready")
             }
         }
     }
@@ -234,10 +238,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun showSettings() {
+        if (!loggedIn) return
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 16, 32, 16) }
-        val compat = SwitchCompat(this).apply { text = "兼容模式（简易棋盘）"; isChecked = prefs.getBoolean("compat_mode", false) }
         val refresh = SwitchCompat(this).apply { text = "使用屏幕最高刷新率"; isChecked = prefs.getBoolean("high_refresh", true) }
-        content.addView(compat)
         content.addView(refresh)
         val label = TextView(this).apply { text = "左右屏幕边距（避开刘海）：${prefs.getInt("edge_padding_px", 0)} px" }
         content.addView(label)
@@ -248,11 +251,11 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(bar: SeekBar?) {}
         })
         content.addView(padding)
-        AlertDialog.Builder(this).setTitle("画质与屏幕设置").setView(content)
-            .setPositiveButton("应用并刷新") { _, _ ->
-                prefs.edit().putBoolean("compat_mode", compat.isChecked).putBoolean("high_refresh", refresh.isChecked)
+        AlertDialog.Builder(this).setTitle("安卓屏幕设置").setView(content)
+            .setPositiveButton("应用") { _, _ ->
+                prefs.edit().putBoolean("high_refresh", refresh.isChecked)
                     .putInt("edge_padding_px", padding.progress).apply()
-                loadServer()
+                applyDisplaySettings()
             }.setNegativeButton("取消", null).show()
     }
 
@@ -332,10 +335,25 @@ class MainActivity : AppCompatActivity() {
         DisplayHelper.apply(window, prefs.getBoolean("high_refresh", true))
     }
     private fun showNativeMenu() {
+        if (!loggedIn) {
+            AlertDialog.Builder(this).setTitle("退出卫戍协议？")
+                .setPositiveButton("退出") { _, _ -> finish() }
+                .setNegativeButton("取消", null).show()
+            return
+        }
         AlertDialog.Builder(this).setTitle("卫戍协议")
-            .setItems(arrayOf("画质与屏幕设置", "诊断与日志", "刷新页面", "退出")) { _, which ->
-                when (which) { 0 -> showSettings(); 1 -> showLogs(); 2 -> loadServer(); 3 -> finish() }
+            .setItems(arrayOf("安卓屏幕设置", "诊断与日志", "刷新页面", "故障恢复", "退出")) { _, which ->
+                when (which) { 0 -> showSettings(); 1 -> showLogs(); 2 -> loadServer(); 3 -> showRecovery(); 4 -> finish() }
             }.setNegativeButton("继续游戏", null).show()
+    }
+    private fun showRecovery() {
+        AlertDialog.Builder(this).setTitle("故障恢复")
+            .setMessage("仅在游戏画面无法正常显示时使用。切换兼容模式会刷新页面。")
+            .setPositiveButton("兼容模式重启") { _, _ -> enableCompatMode() }
+            .setNeutralButton("恢复正常模式") { _, _ ->
+                prefs.edit().putBoolean("compat_mode", false).apply()
+                loadServer()
+            }.setNegativeButton("取消", null).show()
     }
     override fun onDestroy() {
         cancelWatchdog()

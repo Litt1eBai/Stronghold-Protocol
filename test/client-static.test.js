@@ -968,11 +968,13 @@ describe('screen helpers', () => {
     assert.equal(findUiAsset({ ui: {} }, ['x']), null);
   });
 
-  test('title exposes the shared settings modal', () => {
-    const source = readFileSync(path.join(PUBLIC, 'js/screens/title.js'), 'utf8');
-    assert.match(source, /import \{ SettingsModal \} from '\.\.\/ui\/settings\.js'/);
-    assert.match(source, /class="title-settings fsbtn tapx"/, 'title screen includes the settings control');
-    assert.match(source, /<\$\{SettingsModal\} open=\$\{settingsOpen\}/, 'settings control opens the shared modal');
+  test('settings entry is available after login in the lobby and room', () => {
+    const title = readFileSync(path.join(PUBLIC, 'js/screens/title.js'), 'utf8');
+    assert.doesNotMatch(title, /SettingsModal|title-settings/);
+    for (const screen of ['lobby', 'room']) {
+      const source = readFileSync(path.join(PUBLIC, `js/screens/${screen}.js`), 'utf8');
+      assert.match(source, /<\$\{SettingsButton\}/);
+    }
   });
 
   test('lobby: normalizeCode / parseRoomParam / difficultyInfo', async () => {

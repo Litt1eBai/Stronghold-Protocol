@@ -66,7 +66,7 @@ Outputs:
 
 The Android APK contains no ABI-specific native libraries and runs on Android 7+
 with a sufficiently recent system WebView. It keeps `com.strongholdprotocol.client`
-and increases the version code to 1006 (Tauri used 1003, the WebView-only APK used 1004, the first asset bundle used 1005). An update
+and uses version 0.1.4 and version code 1008 (Tauri used 1003, the WebView-only APK used 1004, the first asset bundle used 1005, the skin bundle used 1006, the first 0.1.4 build used 1007). An update
 can be installed over that APK with the same key; the change from the bundled
 `tauri.localhost` page to the actual server origin requires logging in again.
 Existing server accounts and progress remain available.
@@ -89,8 +89,11 @@ preinstalled art does not make this an offline game.
 
 ## Android controls
 
-Startup connects directly to the compiled server. Press the Android Back button
-for native settings, diagnostics, refresh and exit. The shell provides immersive
+Startup connects silently to the compiled server without a native connection screen.
+Settings are available after login in the lobby, room and match. Game quality and
+audio use the shared web settings; Android screen settings only adjust refresh
+rate and safe-area padding, without reloading the page. After login, the Android
+Back button opens screen settings, diagnostics, refresh, recovery and exit. The shell provides immersive
 landscape mode, audio focus, high refresh rates, configurable screen-edge padding,
 rotating file logs and log sharing. Connection failures offer retry and diagnostics.
 
@@ -100,3 +103,7 @@ dialog offers compatibility mode, which reloads with `?render=fallback&board=2d`
 and a software WebView layer. This also handles older GPU/WebView failures.
 
 Operator skins use the same web selection, rendering and room synchronization on all clients. See [skins](../docs/SKINS.md); deploy the matching server/web update before using the new APK.
+
+The Android adapter also supplies the lobby/room settings entry on older deployed
+web pages, using their existing settings modal. Connection errors retain retry
+and diagnostics; render failures offer compatibility recovery.

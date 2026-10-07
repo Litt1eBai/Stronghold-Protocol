@@ -59,6 +59,8 @@ export function SettingsModal({ open, onClose }) {
     actions=${html`<${Button} variant="secondary" icon="book" class="set-guide" onClick=${() => openGuide(0)}>玩法说明<//>
       <${Button} variant="primary" icon="check" onClick=${onClose}>完成<//>`}>
     <div class="set-list">
+      ${globalThis.AndroidNative?.openServerSettings ? html`<${Button} variant="secondary" class="native-display-settings"
+        onClick=${() => globalThis.AndroidNative.openServerSettings()}>安卓屏幕设置<//>` : null}
       <${Slider} label="背景音乐" micro="BGM" icon="play" value=${s.bgm} onInput=${(v) => updateSettings({ bgm: v })} />
       <${Slider} label="干员语音" micro="VOICE" icon="mic" value=${s.voice} onInput=${(v) => updateSettings({ voice: v })} />
       <${Slider} label="音效" micro="SFX" icon="signal" value=${s.sfx}
@@ -77,4 +79,13 @@ export function SettingsModal({ open, onClose }) {
         : html`<p class="set-hint">快捷键：<kbd>R</kbd> 刷新 · <kbd>F</kbd> 冻结 · <kbd>D</kbd> 升级 · <kbd>Q</kbd> 撤退选中干员 · <kbd>X</kbd> 出售选中干员 · <kbd>Space</kbd> 准备就绪 · <kbd>Esc</kbd> 关闭弹窗 · 右键查看详情</p>`}
     </div>
   <//>`;
+}
+
+/** Shared entry for authenticated lobby and room screens. */
+export function SettingsButton({ class: cls = '' }) {
+  const authenticated = useStore((s) => s.session.entered && s.me.playerId != null && s.connection.status === 'online');
+  const [open, setOpen] = useState(false);
+  if (!authenticated) return null;
+  return html`<${Button} variant="secondary" size="sm" class=${cls} onClick=${() => setOpen(true)}>设置<//>
+    <${SettingsModal} open=${open} onClose=${() => setOpen(false)} />`;
 }

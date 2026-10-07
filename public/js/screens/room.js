@@ -18,6 +18,7 @@ import {
 import { toast, toastError } from '../ui/toasts.js';
 import { copyText } from '../ui/clipboard.js';
 import { GuideButton } from '../ui/guide.js';
+import { SettingsButton } from '../ui/settings.js';
 import { LoadoutButton } from './loadout.js';
 import { net } from '../net.js';
 import { store, useStore, shallowEqual, emptyMatch, isSpectating } from '../store.js';
@@ -280,6 +281,7 @@ export function RoomScreen() {
         <h1 class="topbar__title">${coop ? '同盟模拟' : '独立模拟'}<span class="topbar__sep"></span><${DifficultyTag} difficulty=${room.difficulty} size="lg" /></h1>
       </div>
       <div class="topbar__right">
+        <${SettingsButton} class="room-settings" />
         ${coop ? html`<${InviteBox} code=${room.code} name=${me.name} difficulty=${room.difficulty} />` : html`<div class="solo-note"><${MicroLabel}>SINGLE OPERATOR<//><span>仅限 1 名博士</span></div>`}
       </div>
     </header>

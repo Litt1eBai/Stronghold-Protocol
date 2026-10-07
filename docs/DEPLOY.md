@@ -412,7 +412,7 @@ npm.cmd --prefix client ci
 
 安卓需要 JDK 21、Android SDK Platform 37、Build Tools 36 或更高，以及完整的本地静态资产，无需 Rust/NDK 或初始化生成工程。Gradle 打包前校验素材清单，缺资源会终止构建。HTTP 地址使用 HTTP/WS，HTTPS 地址使用 HTTPS/WSS。服务器地址改变后需重新构建客户端。替换已预装的同名素材需要更新 APK，或在服务器资源 URL 添加版本查询参数以改走服务器。
 
-产物在 `client/artifacts/windows/` 和 `client/artifacts/android/Stronghold-Protocol-release.apk`。默认沿用 `.cache/client-signing/` 中的 release 密钥；后续更新必须保留同一密钥，密钥及密码不提交到 Git。安卓按系统返回键进入原生画质设置、日志诊断和刷新菜单。完整构建配置与旧版升级说明见 [client/README.md](../client/README.md)。
+产物在 `client/artifacts/windows/` 和 `client/artifacts/android/Stronghold-Protocol-release.apk`。默认沿用 `.cache/client-signing/` 中的 release 密钥；后续更新必须保留同一密钥，密钥及密码不提交到 Git。安卓静默连接；登录后可在大厅、房间和对局里打开设置。按系统返回键进入安卓屏幕设置、日志诊断、刷新和故障恢复菜单。完整构建配置与旧版升级说明见 [client/README.md](../client/README.md)。
 
 ## 4. macOS / Linux 常驻
 
