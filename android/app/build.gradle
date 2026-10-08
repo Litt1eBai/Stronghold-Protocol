@@ -24,7 +24,7 @@ def serverUrl = project.findProperty('serverUrl') ?: 'https://play.example.com'
 
 android { namespace 'com.strongholdprotocol.client'; compileSdk 35
     defaultConfig {
-        applicationId 'com.strongholdprotocol.client'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1.3'
+        applicationId 'com.strongholdprotocol.client'; minSdk 26; targetSdk 35; versionCode 2; versionName '0.2.1'
         buildConfigField 'String', 'SERVER_URL', '"https://play.example.com"'
     }
     buildTypes { release { minifyEnabled false; buildConfigField 'String', 'SERVER_URL', '"' + serverUrl.replace('"', '') + '"' } }

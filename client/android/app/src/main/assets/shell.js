@@ -10,7 +10,7 @@
   let settingsHost;
   let closeSettings;
   const loggedIn = () => {
-    const s = window.__SP__?.store.get();
+    const s = window.__SP__?.store?.get?.();
     return Boolean(s?.session.entered && s.me.playerId != null);
   };
   // Older deployed pages have no lobby settings entry. Reuse their shared modal
@@ -97,9 +97,11 @@
     else if (!subscribed) {
       subscribed = true;
       adaptSettings();
-      observer = new MutationObserver(adaptSettings);
-      observer.observe(document.body, { childList: true, subtree: true });
-      unsubscribe = window.__SP__.store.subscribe((state, previous) => {
+      if (typeof MutationObserver === 'function') {
+        observer = new MutationObserver(adaptSettings);
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+      unsubscribe = window.__SP__?.store?.subscribe?.((state, previous) => {
         if (state.session.entered !== previous.session.entered || state.me.playerId !== previous.me.playerId) { report(); adaptSettings(); }
       });
     }

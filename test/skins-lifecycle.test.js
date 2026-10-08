@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DATA, makeMatch } from './match/harness.js';
 import { unitInfo } from '../server/sim/snapshot.js';
+import { renderInfo } from '../public/js/render/app/info.js';
 import { buildBattleSpec, createBattleFromSpec } from '../server/sim/spec.js';
 import { validateC2S } from '../shared/protocol.js';
 import { skinsStore, setSkins, installSkinsSync } from '../public/js/ui/skins.js';
@@ -12,6 +13,40 @@ const SKIN = 'char_498_inside@kitchen#2';
 const CH = DATA.chess[ID];
 const fixture = { ...DATA, assets: { ...DATA.assets, chars: { ...DATA.assets.chars,
   [CH.charId]: { ...DATA.assets.chars[CH.charId], skins: { [SKIN]: { avatar: '/test.png' } } } } } };
+
+test('stored skins never replace a stand-in or a DIY operator body', () => {
+  const silver = 'chess_char_4_22_a';
+  const skin = 'char_172_svrash@winter#1';
+  const data = { ...DATA, assets: { ...DATA.assets, chars: { ...DATA.assets.chars,
+    [DATA.chess[silver].charId]: { ...DATA.assets.chars[DATA.chess[silver].charId],
+      skins: { [skin]: { avatar: '/test.png' } } },
+  } } };
+  const h = makeMatch({ data, seats: [{ seat: 0, playerId: 'p_0', connected: true, isBot: false,
+    notOwned: [silver], skins: { [silver]: skin },
+    diy: { chess_char_5_diy1_a: { charId: 'char_112_siege', skillIndex: 2, uniEquipId: 'uniequip_002_siege' } },
+  }] });
+  try {
+    const ps = h.m.players.get('p_0');
+    const standIn = ps.newPiece('chess', silver);
+    const diy = ps.newPiece('chess', 'chess_char_5_diy1_a');
+    ps.board.set('9,3', standIn);
+    ps.board.set('9,4', diy);
+    assert.equal(ps.skins[silver], skin, 'keep the choice for future owned matches');
+    assert.equal(ps.pieceView(standIn).skin, undefined);
+    assert.equal(ps.pieceView(diy).skin, undefined);
+    const input = ps.battleInput();
+    assert.equal(input.units.find(u => u.uid === standIn.uid).standIn, true);
+    assert.equal(input.units.find(u => u.uid === diy.uid).diy.charId, 'char_112_siege');
+    assert.ok(input.units.every(u => !u.skin));
+    const spec = buildBattleSpec({ battleId: 'skin-bodies', seed: 1, stageId: 'act2autochess_m01',
+      fieldKind: 'normal', players: [input], waves: [] }, { data });
+    const battle = createBattleFromSpec(spec, data);
+    assert.equal(battle.units.find(u => u.uid === diy.uid).def.raw.charId, 'char_112_siege');
+    assert.ok(battle.units.every(u => !u.skin));
+    const prep = h.m.prepFieldMeta(ps);
+    assert.ok(prep.units.every(u => !u.skin));
+  } finally { h.m.dispose(); }
+});
 
 test('skin selection reaches public/prep views, promoted chess, battle specs and snapshots; resets and bots stay default', () => {
   const h = makeMatch({ data: fixture, seats: [
@@ -33,6 +68,7 @@ test('skin selection reaches public/prep views, promoted chess, battle specs and
     const unit = [...battle.units.values()].find(u => u.side === 'ally');
     assert.equal(unit.skin, SKIN);
     assert.equal(unitInfo(unit).skin, SKIN);
+    assert.equal(renderInfo(unitInfo(unit)).skin, SKIN);
     assert.equal(h.m.setSkins('p_0', { [ID]: 'not-an-installed-skin', [CH.goldenId]: SKIN }).ok, true);
     assert.deepEqual(ps.skins, {});
     assert.equal(ps.pieceView(piece).skin, undefined);

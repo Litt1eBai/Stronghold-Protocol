@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkAssets, checkData, checkVendor } from './setup.mjs';
+import { writePackIndex } from './packs.mjs';
 import { clientServerOrigin } from './client-server-url.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,6 +24,8 @@ await fs.cp(path.join(root, 'public'), out, { recursive: true });
 await fs.cp(path.join(root, 'shared'), path.join(out, 'shared'), { recursive: true });
 await fs.cp(path.join(root, 'data'), path.join(out, 'data'), { recursive: true });
 await fs.cp(path.join(root, 'server', 'sim'), path.join(out, 'sim'), { recursive: true });
+await fs.cp(path.join(root, 'packs'), path.join(out, 'packs'), { recursive: true });
+writePackIndex(root, path.join(out, 'packs', 'index.json'));
 
 const indexPath = path.join(out, 'index.html');
 let index = await fs.readFile(indexPath, 'utf8');

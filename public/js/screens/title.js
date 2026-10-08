@@ -1,4 +1,6 @@
-// Title screen: season-style backdrop, big title 卫戍协议：盟约, remembered nickname, 开始.
+// Title screen: season-style backdrop, big title 卫戍协议：盟约, remembered nickname, 开始, the language menu
+// (中文 | English | every pack in public/i18n/, ui/lang.js; a title in an alphabetic script — English — is the big one and
+// the small wordmark above it hides).
 //
 // Pressing 开始 validates the nickname (1..NAME_MAX_LEN chars, no control characters), stores it,
 // marks this tab as "entered" (so reloads skip the title) and hands the name to net.js, which
@@ -9,7 +11,7 @@
 // pure CSS/SVG (radar, ridgelines, glow), so it never issues a request that can 404.
 
 import { useMemo, useState } from '../../vendor/hooks.module.js';
-import { NAME_MAX_LEN, APP_VERSION } from '../../../shared/constants.js';
+import { NAME_MAX_LEN, APP_VERSION, DEV_BUILD } from '../../../shared/constants.js';
 import { html, Button, Icon, MicroLabel, TextField, PingPill } from '../ui/components.js';
 import { GuideButton } from '../ui/guide.js';
 import { toast } from '../ui/toasts.js';
@@ -17,6 +19,9 @@ import { net, identity, registerAccount } from '../net.js';
 import { store, useStore, shallowEqual } from '../store.js';
 import { data, useData } from '../data.js';
 import { FullscreenButton, detectFeatures } from '../ui/device.js';
+import { LangToggle, useLang } from '../ui/lang.js';
+import { t, N_ } from '../../../shared/i18n.js';
+import { scriptOf } from '../../../shared/i18nPacks.js';
 
 // Same character classes as server/net.js sanitizeName (control, zero-width, bidi, BOM), so a name
 // the client accepts is never rejected by the server's hello validation.
@@ -185,14 +190,15 @@ function Ridges() {
 }
 
 const STATUS_TEXT = {
-  idle: '准备连接', connecting: '正在连接服务器', connected: '已连接服务器', handshaking: '正在验证身份',
-  online: '已连接服务器', reconnecting: '连接中断，正在重连', closed: '连接已关闭',
+  idle: N_('准备连接'), connecting: N_('正在连接服务器'), connected: N_('已连接服务器'), handshaking: N_('正在验证身份'),
+  online: N_('已连接服务器'), reconnecting: N_('连接中断，正在重连'), closed: N_('连接已关闭'),
 };
 
 /** Title screen component. */
 export function TitleScreen() {
   const conn = useStore((s) => s.connection, shallowEqual);
   const pendingJoin = useStore((s) => s.ui.pendingJoin);
+  useLang(); // re-render on a language switch
   const [name, setName] = useState(() => store.get().me.name || identity.loadName() || '');
   const [password, setPassword] = useState('');
   const [registerMode, setRegisterMode] = useState(false);
@@ -219,24 +225,25 @@ export function TitleScreen() {
 
   const valid = isValidName(name);
   const start = () => {
-    if (!valid) { toast('请输入博士代号', 'warn'); return; }
+    if (!valid) { toast(t('请输入博士代号'), 'warn'); return; }
     enterSession(name, password);
   };
+
   const submitRegistration = async () => {
     const username = registerUsername.trim().toLowerCase();
     const displayName = sanitizeName(registerDisplayName || username);
     const qq = registerQq.trim();
-    if (!/^[a-z0-9][a-z0-9._-]{1,11}$/.test(username)) { setRegisterError('账号需为 2-12 位小写字母、数字或 . _ -'); return; }
-    if (!/^\d{5,12}$/.test(qq)) { setRegisterError('请输入有效 QQ 号'); return; }
-    if (!displayName) { setRegisterError('请输入昵称'); return; }
-    if (!registerPassword) { setRegisterError('请输入密码'); return; }
-    if (registerPassword !== registerConfirm) { setRegisterError('两次输入的密码不一致'); return; }
+    if (!/^[a-z0-9][a-z0-9._-]{1,11}$/.test(username)) { setRegisterError(t('账号需为 2-12 位小写字母、数字或 . _ -')); return; }
+    if (!/^\d{5,12}$/.test(qq)) { setRegisterError(t('请输入有效 QQ 号')); return; }
+    if (!displayName) { setRegisterError(t('请输入昵称')); return; }
+    if (!registerPassword) { setRegisterError(t('请输入密码')); return; }
+    if (registerPassword !== registerConfirm) { setRegisterError(t('两次输入的密码不一致')); return; }
     setRegisterBusy(true); setRegisterError('');
     try {
       const result = await registerAccount({ username, displayName, qq, password: registerPassword });
       enterRegisteredSession(username, result.account?.displayName || displayName, result.auth);
     } catch (err) {
-      setRegisterError(err?.message || '注册失败，请稍后重试');
+      setRegisterError(err?.message || t('注册失败，请稍后重试'));
     } finally { setRegisterBusy(false); }
   };
 
@@ -245,6 +252,9 @@ export function TitleScreen() {
 
   // touch screens: no autofocus (it would pop the on-screen keyboard over a landscape phone's whole view)
   const touchUi = useMemo(() => detectFeatures().coarse, []);
+  // a title in an alphabetic script (English, French …) is the big one in the display face and the wordmark above it
+  // hides; a CJK / kana / Hangul title keeps the Chinese layout (shared/i18nPacks.js scriptOf — a pack needs no flag)
+  const alphabetic = scriptOf(t('卫戍协议')) === 'alphabetic';
   return html`<div class="screen title-screen">
     <div class=${`title-bg${bgLoaded ? ' has-art' : ''}${ridgesLoaded ? ' has-ridges' : ''}`} aria-hidden="true">
       ${backdrop ? html`<img class="title-bg__art" src=${backdrop} alt="" draggable=${false}
@@ -269,58 +279,63 @@ export function TitleScreen() {
       <div><${MicroLabel} tone="mint">RHODES ISLAND // SIMULATION SERVICE<//><br /><${MicroLabel}>TACTICAL CO-OP NODE · 02<//></div>
     </div>
     <div class="title-corner title-corner--tr">
-      <${MicroLabel} tone="hi">TARGET POINT<//><br /><${MicroLabel}>STRONGHOLD PROTOCOL<//>
+      <div>
+        <${LangToggle} class="title-lang" />
+        <${MicroLabel} tone="hi">TARGET POINT<//><br /><${MicroLabel}>STRONGHOLD PROTOCOL<//>
+      </div>
     </div>
 
     <main class="title-main">
       <${Emblem} />
-      <div class="title-en">
+      ${alphabetic ? null : html`<div class="title-en">
         <span class="title-en__a">STRONGHOLD PROTOCOL</span>
         <span class="title-en__b">ALLIANCE</span>
-      </div>
-      <h1 class="title-cn">卫戍协议<span class="title-cn__colon">：</span><em>盟约</em></h1>
-      <p class="title-tag">调配资金与干员，与同伴协同布防，抵御多波次进攻，直至击败敌方领袖。</p>
+      </div>`}
+      <h1 class=${`title-cn${alphabetic ? ' title-cn--latin' : ''}`}>${t('卫戍协议')}<span class="title-cn__colon">${alphabetic ? ': ' : '：'}</span><em>${t('盟约')}</em></h1>
+      <p class="title-tag">${t('调配资金与干员，与同伴协同布防，抵御多波次进攻，直至击败敌方领袖。')}</p>
 
       <div class="title-login">
         ${pendingJoin ? html`<div class="title-invite">
           <${Icon} name="key" />
-          <span>收到同盟邀请</span><b class="num">${pendingJoin}</b><span class="t-lo">· 输入代号后将自动加入</span>
+          <span>${t('收到同盟邀请')}</span><b class="num">${pendingJoin}</b><span class="t-lo">${t('· 输入代号后将自动加入')}</span>
         </div>` : null}
         ${registerMode ? html`
-          <${TextField} label="账号" micro="USERNAME" size="lg" icon="user" value=${registerUsername} maxLength=${12}
+          <${TextField} label=${t('账号')} micro="USERNAME" size="lg" icon="user" value=${registerUsername} maxLength=${12}
             autoFocus=${!touchUi} onInput=${setRegisterUsername} onEnter=${submitRegistration} />
-          <${TextField} label="昵称" micro="DISPLAY NAME" size="lg" icon="user" value=${registerDisplayName} maxLength=${NAME_MAX_LEN}
+          <${TextField} label=${t('昵称')} micro="DISPLAY NAME" size="lg" icon="user" value=${registerDisplayName} maxLength=${NAME_MAX_LEN}
             onInput=${setRegisterDisplayName} onEnter=${submitRegistration} />
-          <${TextField} label="QQ 号" micro="QQ NUMBER" size="lg" icon="key" value=${registerQq} maxLength=${12}
+          <${TextField} label=${t('QQ 号')} micro="QQ NUMBER" size="lg" icon="key" value=${registerQq} maxLength=${12}
             onInput=${setRegisterQq} onEnter=${submitRegistration} />
-          <${TextField} label="密码" micro="PASSWORD" size="lg" icon="lock" type="password" value=${registerPassword} maxLength=${256}
+          <${TextField} label=${t('密码')} micro="PASSWORD" size="lg" icon="lock" type="password" value=${registerPassword} maxLength=${256}
             onInput=${setRegisterPassword} onEnter=${submitRegistration} />
-          <${TextField} label="确认密码" micro="CONFIRM PASSWORD" size="lg" icon="lock" type="password" value=${registerConfirm} maxLength=${256}
+          <${TextField} label=${t('确认密码')} micro="CONFIRM PASSWORD" size="lg" icon="lock" type="password" value=${registerConfirm} maxLength=${256}
             onInput=${setRegisterConfirm} onEnter=${submitRegistration} />
           ${registerError ? html`<div class="title-error">${registerError}</div>` : null}
-          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" loading=${registerBusy} onClick=${submitRegistration}>注册并进入<//>
-          <${Button} variant="ghost" size="sm" block=${true} disabled=${registerBusy} onClick=${() => { setRegisterMode(false); setRegisterError(''); }}>返回登录<//>
+          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" loading=${registerBusy} onClick=${submitRegistration}>${t('注册并进入')}<//>
+          <${Button} variant="ghost" size="sm" block=${true} disabled=${registerBusy} onClick=${() => { setRegisterMode(false); setRegisterError(''); }}>${t('返回登录')}<//>
         ` : html`
-          <${TextField} label="账号 / 博士代号" micro="ACCOUNT / CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
+          <${TextField} label=${t('账号 / 博士代号')} micro="ACCOUNT / CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
             autoFocus=${!touchUi} onInput=${setName} onEnter=${start} />
-          <${TextField} label="密码" micro="PASSWORD" size="lg" icon="lock" type="password"
+          <${TextField} label=${t('密码')} micro="PASSWORD" size="lg" icon="lock" type="password"
             value=${password} maxLength=${256} onInput=${setPassword} onEnter=${start} />
-          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" disabled=${!valid} onClick=${start}>开始<//>
-          <${Button} variant="ghost" size="sm" block=${true} onClick=${() => { setRegisterMode(true); setRegisterError(''); }}>注册账号<//>
+          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" disabled=${!valid} onClick=${start}>${t('开始')}<//>
+          <${Button} variant="ghost" size="sm" block=${true} onClick=${() => { setRegisterMode(true); setRegisterError(''); }}>${t('注册账号')}<//>
         `}
         <div class="title-conn">
           <span class=${`status-dot ${dotClass}`}></span>
-          <span>${STATUS_TEXT[conn.status] || conn.status}</span>
+          <span>${STATUS_TEXT[conn.status] ? t(STATUS_TEXT[conn.status]) : conn.status}</span>
           ${conn.status === 'online' ? html`<${PingPill} ms=${conn.ping} />` : null}
-          <${GuideButton} class="title-guide" />
+          <${GuideButton} class="title-guide" label=${t('玩法说明')} />
           <${FullscreenButton} class="title-fs" />
         </div>
       </div>
     </main>
 
+
     <footer class="title-foot">
-      <span>非官方同人复刻 · 游戏素材版权归 上海鹰角网络 / Yostar 所有</span>
+      <span>${t('非官方同人复刻 · 游戏素材版权归 上海鹰角网络 / Yostar 所有')}</span>
       <${MicroLabel}>v${APP_VERSION} · WEB SIMULATION<//>
+      ${DEV_BUILD ? html`<span class="title-dev" role="note">${t('开发版 · 不稳定，请勿用于公开服务器')}</span>` : null}
     </footer>
   </div>`;
 }
