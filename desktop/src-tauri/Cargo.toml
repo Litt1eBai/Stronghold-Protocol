@@ -1,6 +1,6 @@
 [package]
 name = "stronghold-protocol-desktop"
-version = "0.2.1"
+version = "0.2.3"
 description = "Stronghold Protocol fixed-endpoint desktop client"
 authors = ["Stronghold Protocol contributors"]
 edition = "2021"

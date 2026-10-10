@@ -72,7 +72,8 @@ test('导出与导入链路支持 skins 字段且安全隔离', () => {
   const loadout = { chess_char_1_01_a: { skill: 1 } };
   const skins = { chess_char_1_01_a: 'char_002_amiye@epoque#4' };
 
-  const payload = exportPayload(loadout, { skins });
+  const ops = { char_498_inside: { potential: 2, cultivate: 1 } };
+  const payload = exportPayload(loadout, { skins, ops });
   assert.ok(payload.skins);
   assert.equal(payload.skins.chess_char_1_01_a, 'char_002_amiye@epoque#4');
 
@@ -80,6 +81,13 @@ test('导出与导入链路支持 skins 字段且安全隔离', () => {
   assert.ok(parsed.ok);
   assert.deepEqual(parsed.entries, loadout);
   assert.deepEqual(parsed.skins, skins);
+  assert.deepEqual(parsed.ops, ops);
+  const skinOnly = parseImport({ skins });
+  assert.ok(skinOnly.ok);
+  assert.deepEqual(skinOnly.skins, skins);
+  const opsOnly = parseImport({ ops });
+  assert.ok(opsOnly.ok);
+  assert.deepEqual(opsOnly.ops, ops);
 });
 
 test('Spine 与 Avatar 资源回退：皮肤缺损优雅 fallback 至原皮', () => {

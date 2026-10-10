@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AuthStore } from '../server/auth.js';
 import { startServer } from '../server/index.js';
+import { APP_VERSION } from '../shared/constants.js';
 import { TestClient } from './helpers/wsClient.js';
 
-test('account HTTP routes and authenticated hello retain v0.2.1 capabilities and session settings', async () => {
+test('account HTTP routes and authenticated hello retain upstream capabilities and session settings', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sp-auth-merge-'));
   const qqFile = join(dir, 'allowed-qq.txt');
   writeFileSync(qqFile, '12345678\n');
@@ -49,12 +50,16 @@ test('account HTTP routes and authenticated hello retain v0.2.1 capabilities and
     const resumedWelcome = await resumed.request({ t: 'hello', name: 'Doctor', token: welcome.token });
     assert.equal(resumedWelcome.playerId, welcome.playerId);
     assert.equal(resumedWelcome.account.username, 'doctor');
+    const recovery = await connect();
+    const occupied = await recovery.request({ t: 'hello', name: 'Doctor', token: welcome.token, noReplace: true, auth: created.auth });
+    assert.equal(occupied.code, 'SESSION_IN_USE', 'account login must preserve upstream seat protection');
+    assert.equal(srv.registry.byToken(welcome.token).connected, true);
     assert.deepEqual(srv.registry.byToken(welcome.token).notOwned, ['chess_char_4_22_a']);
     assert.equal((await resumed.request({ t: 'room.list' })).t, 'ok');
     const jwtClient = await connect();
     assert.equal((await jwtClient.request({ t: 'hello', name: 'Doctor', auth: created.auth })).account.username, 'doctor');
     const health = await (await fetch(srv.url + '/healthz')).json();
-    assert.equal(health.app, '0.2.1');
+    assert.equal(health.app, APP_VERSION);
     assert.deepEqual(health.auth, { required: true, users: 1 });
   } finally {
     for (const c of clients) await c.terminate();

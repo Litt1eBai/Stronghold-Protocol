@@ -27,7 +27,7 @@ test('skin picker on desktop and touch phone: persist/export/reset, room sync an
       await page.waitForSelector('.lo-card', { visible: true });
       await page.type('.lo-search input', '隐现');
       await page.waitForFunction(() => document.querySelectorAll('.lo-card').length === 1);
-      await page.click('.lo-card');
+      await page.click('.lo-card__pick');
       await page.evaluate(() => [...document.querySelectorAll('.lo-dtab')].find(e => e.textContent.includes('换装')).click());
       await page.waitForSelector(`[data-skin="${SKIN}"]`, { visible: true });
       await page.click(`[data-skin="${SKIN}"]`);

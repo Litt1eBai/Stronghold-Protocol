@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "stronghold-protocol-client"
-version = "0.2.1"
+version = "0.2.3"
 dependencies = [
  "reqwest",
  "serde_json",
