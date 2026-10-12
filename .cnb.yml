@@ -48,10 +48,10 @@ master:
           script: npm ci --no-audit --no-fund
         - name: Verify release identity
           script: node tools/cnb-release.mjs identity
-        - name: Verify code
-          script: npm run ci && npm run golden
         - name: Prepare required art and skins
           script: node tools/fetch-assets.mjs --strict && node tools/prepare-skins.mjs
+        - name: Verify code
+          script: npm run ci && npm run golden
         - name: Build and sign Android
           imports:
             - https://cnb.cool/littlebai/secrets/-/blob/main/android.yml
