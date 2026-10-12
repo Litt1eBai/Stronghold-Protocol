@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { computeBuildTag } from '../server/http/buildTag.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -53,9 +54,9 @@ async function main() {
     const vendor = spawnSync(process.execPath, ['tools/vendor.mjs'], { cwd: stage, stdio: 'inherit' });
     if (vendor.error || vendor.status !== 0) throw vendor.error || new Error('Production vendor staging failed');
     await normalizeReleaseTimes(stage, Math.floor(Date.now() / 1000));
-    const build = spawnSync(process.execPath, ['--input-type=module', '-e', "import {buildTag} from './server/http/buildTag.js'; console.log(buildTag());"], { cwd: stage, encoding: 'utf8' });
-    if (build.status !== 0) throw new Error('Could not compute server build fingerprint');
-    const info = { id, commit, app: pkg.version, build: build.stdout.trim(), androidVersionCode: announcement.versionCode };
+    const build = computeBuildTag(stage);
+    if (!build) throw new Error('Could not compute server build fingerprint');
+    const info = { id, commit, app: pkg.version, build, androidVersionCode: announcement.versionCode };
     await writeFile(path.join(stage, 'RELEASE.json'), `${JSON.stringify(info, null, 2)}\n`);
     // The announcement is served only after this directory is switched into current.
     await mkdir(path.join(stage, 'public/updates'), { recursive: true });
