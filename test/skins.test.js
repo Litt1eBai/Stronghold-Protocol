@@ -1,7 +1,7 @@
 // 皮肤系统专项自动化测试 (docs/SKINS.md & SKINS-BUILTIN-PLAN.md)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -144,7 +144,9 @@ test('协议层 isSkinId 与 isSkinSelection 防御校验', () => {
   assert.equal(isSkinSelection('not obj'), false);
 });
 
-test('every selectable skin has a parsed model, local avatar, textures and its own animation roles', () => {
+test('every selectable skin has a parsed model, local avatar, textures and its own animation roles', {
+  skip: !existsSync(join(ROOT, 'public/assets')) && 'public/assets missing (prepare art and skins to verify installed files)',
+}, () => {
   const selected = JSON.parse(readFileSync(join(ROOT, 'data/skins-installed.json'), 'utf8'));
   const actual = [];
   for (const [charId, catalogue] of Object.entries(skinsData.chars)) {
