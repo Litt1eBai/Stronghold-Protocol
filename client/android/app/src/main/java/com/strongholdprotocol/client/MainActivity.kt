@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private var recoveryDialog: AlertDialog? = null
     private var documentScript: String = ""
     private val preinstalledAssets by lazy { PreinstalledAssets(assets) }
+    private val updater by lazy { AppUpdater(this) }
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         runOnUiThread { setPageAudio(change == AudioManager.AUDIOFOCUS_GAIN) }
     }
@@ -65,6 +66,7 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() = showNativeMenu()
         })
         loadServer()
+        updater.check()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -251,6 +253,7 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(bar: SeekBar?) {}
         })
         content.addView(padding)
+        button(content, "检查应用更新（${BuildConfig.VERSION_NAME}）") { updater.check(manual = true) }
         AlertDialog.Builder(this).setTitle("安卓屏幕设置").setView(content)
             .setPositiveButton("应用") { _, _ ->
                 prefs.edit().putBoolean("high_refresh", refresh.isChecked)
@@ -311,6 +314,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        updater.onResume()
         if (::webView.isInitialized) { webView.onResume(); requestAudioFocus(); setPageAudio(true) }
     }
     override fun onPause() {
@@ -338,12 +342,13 @@ class MainActivity : AppCompatActivity() {
         if (!loggedIn) {
             AlertDialog.Builder(this).setTitle("退出卫戍协议？")
                 .setPositiveButton("退出") { _, _ -> finish() }
+                .setNeutralButton("检查更新") { _, _ -> updater.check(manual = true) }
                 .setNegativeButton("取消", null).show()
             return
         }
         AlertDialog.Builder(this).setTitle("卫戍协议")
-            .setItems(arrayOf("安卓屏幕设置", "诊断与日志", "刷新页面", "故障恢复", "退出")) { _, which ->
-                when (which) { 0 -> showSettings(); 1 -> showLogs(); 2 -> loadServer(); 3 -> showRecovery(); 4 -> finish() }
+            .setItems(arrayOf("安卓屏幕设置", "检查应用更新", "诊断与日志", "刷新页面", "故障恢复", "退出")) { _, which ->
+                when (which) { 0 -> showSettings(); 1 -> updater.check(manual = true); 2 -> showLogs(); 3 -> loadServer(); 4 -> showRecovery(); 5 -> finish() }
             }.setNegativeButton("继续游戏", null).show()
     }
     private fun showRecovery() {
@@ -356,6 +361,7 @@ class MainActivity : AppCompatActivity() {
             }.setNegativeButton("取消", null).show()
     }
     override fun onDestroy() {
+        updater.close()
         cancelWatchdog()
         recoveryDialog?.dismiss()
         if (::webView.isInitialized) {

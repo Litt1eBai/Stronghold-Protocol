@@ -1,0 +1,91 @@
+master:
+  push:
+    - name: verify
+      docker:
+        image: node:22-bookworm
+        volumes:
+          - /root/.npm:copy-on-write
+      env:
+        SP_E2E: "0"
+        SP_REAL_E2E: "0"
+        RENDER_E2E: "0"
+      stages:
+        - name: Install dependencies
+          script: npm ci --no-audit --no-fund
+        - name: Verify
+          script: npm run ci
+        - name: Golden scenarios
+          script: npm run golden
+
+"android-v*":
+  tag_push:
+    - name: android-and-server-release
+      lock:
+        key: stronghold-production-release
+        expires: 7200
+        wait: true
+        timeout: 7200
+      runner:
+        cpus: 8
+      docker:
+        build: .cnb/android.Dockerfile
+        volumes:
+          - /root/.npm:copy-on-write
+          - /root/.gradle:copy-on-write
+          - .cache:copy-on-write
+          - public/assets:copy-on-write
+          - public/fonts:copy-on-write
+      env:
+        SP_SERVER_URL: http://203.135.99.28:30089
+        SP_E2E: "0"
+        SP_REAL_E2E: "0"
+        RENDER_E2E: "0"
+        DEPLOY_HOST: 203.135.99.28
+        DEPLOY_PORT: "30080"
+        DEPLOY_USER: root
+      stages:
+        - name: Install dependencies
+          script: npm ci --no-audit --no-fund
+        - name: Verify release identity
+          script: node tools/cnb-release.mjs identity
+        - name: Verify code
+          script: npm run ci && npm run golden
+        - name: Prepare required art and skins
+          script: node tools/fetch-assets.mjs --strict && node tools/prepare-skins.mjs
+        - name: Build and sign Android
+          imports:
+            - https://cnb.cool/littlebai/secrets/-/blob/main/android.yml
+          script: bash scripts/cnb-build-android.sh
+        - name: Create release
+          type: git:release
+          options:
+            overlying: true
+            latest: false
+            descriptionFromFile: client/artifacts/android/release-notes.txt
+        - name: Upload APK and checksums
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - client/artifacts/android/Stronghold-Protocol-release.apk
+              - client/artifacts/android/SHA256SUMS
+              - client/artifacts/android/release-notes.txt
+        - name: Verify public download and generate announcement
+          script: node tools/cnb-release.mjs announcement
+        - name: Package server
+          script: node tools/server-release.mjs
+        - name: Deploy and verify server
+          imports:
+            - https://cnb.cool/littlebai/secrets/-/blob/main/deploy.yml
+          script: bash scripts/cnb-deploy.sh
+        - name: Upload announcement and server package
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - client/artifacts/android/android.json
+              - client/artifacts/server/server.tar.gz
+              - client/artifacts/server/SERVER-SHA256SUMS
+        - name: Mark release latest
+          type: git:release
+          options:
+            overlying: true
+            latest: true

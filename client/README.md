@@ -66,11 +66,78 @@ Outputs:
 
 The Android APK contains no ABI-specific native libraries and runs on Android 7+
 with a sufficiently recent system WebView. It keeps `com.strongholdprotocol.client`
-and uses version 0.2.4 and version code 1012 (the 0.2.3 build used 1011, Tauri used 1003,
+and uses version 0.2.4 and version code 1013 (the initial 0.2.4 build used 1012, the 0.2.3 build used 1011, Tauri used 1003,
 and the WebView-only APK used 1004). An update
 can be installed over that APK with the same key; the change from the bundled
 `tauri.localhost` page to the actual server origin requires logging in again.
 Existing server accounts and progress remain available.
+
+## Android application updates
+
+The native shell checks for updates once on startup. A manual check is available in
+Android screen settings, the Back-button menu, and the pre-login exit dialog.
+Checking errors are silent at startup; manual checks show the result. Downloads
+show progress and can be cancelled. They never reload the game page.
+
+`SP_ANDROID_UPDATE_URL` optionally selects the announcement URL at build time.
+The default is `${SP_SERVER_URL}/updates/android.json`. Use HTTPS, or the same
+HTTP origin as an existing HTTP game server. A 404 or 204 means no announcement
+has been published. The server's existing static handler can serve a generated
+`public/updates/android.json` without an API change; this file is ignored by Git.
+Do not add a `?v=` cache-busting suffix to the announcement (the static server
+treats versioned URLs as immutable). Replace it atomically after publishing.
+
+The announcement uses this format:
+
+```json
+{
+  "format": 1,
+  "applicationId": "com.strongholdprotocol.client",
+  "versionCode": 1013,
+  "versionName": "0.2.4",
+  "apkUrl": "https://downloads.example.com/Stronghold-Protocol-release.apk",
+  "sha256": "SHA256_OF_THE_SIGNED_APK_AS_64_HEX_CHARACTERS",
+  "size": 671340544,
+  "minSdk": 24,
+  "notes": "更新说明"
+}
+```
+
+Generate real metadata from the final signed APK and the current Android Gradle
+version (never the upstream tag alone):
+
+```bash
+node tools/android-release.mjs --apk client/artifacts/android/Stronghold-Protocol-release.apk --url https://downloads.example.com/Stronghold-Protocol-release.apk --out client/artifacts/android/android.json --notes-file release-notes.txt
+```
+
+For every native release, increase `versionCode`, even when the upstream game's
+version is unchanged. Upload the APK to a public CNB Release or another HTTPS
+download location, confirm that it is downloadable without authentication, then
+deploy the matching server and publish `android.json` at the announcement URL.
+Private Release links that require logging in will not work in the native downloader.
+
+Before installation the updater checks byte size, SHA-256, actual APK package and
+version, and equality of the APK's signing certificates with the installed app.
+HTTPS redirects are allowed, but never a downgrade to HTTP. Keep the existing
+signing key; key rotation is not supported by this first updater. Debug APKs use
+a different package ID and must have a separate announcement to update.
+
+The APK is downloaded to a private app directory and shared with the system
+installer through a provider restricted to that directory. Android 8+ may first
+ask the user to allow this app to install packages. On returning, the app offers
+installation again. Installation always requires system confirmation and retains
+the app's existing storage. Closing the app cancels active work; downloads do not
+resume across process death. The first updater-enabled APK must be installed manually.
+
+CNB can build the Android project on Linux with Node, JDK 21, Android SDK platform
+37 and Build Tools 36 or newer. `node tools/build-android-client.mjs` now runs on
+Linux and Windows. Prepare all game assets/fonts before building; incomplete
+assets fail the build. The tag pipeline in `.cnb.yml` signs the APK, publishes a
+CNB Release, verifies anonymous downloads, then deploys the server with the
+matching announcement. See [CNB release setup](../docs/CNB-RELEASE.md) for secrets,
+release tags and rollback behavior. Use the same announcement URL for future
+releases. Secrets must not be stored in `.cnb.yml`, the announcement, or the
+public code repository.
 
 The Android shell recognizes the settings button anywhere in the lobby or room
 header, including the left toolbar introduced in 0.2.4. It adds a fallback entry

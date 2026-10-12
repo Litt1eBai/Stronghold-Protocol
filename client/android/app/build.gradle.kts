@@ -13,6 +13,14 @@ require(endpoint.scheme in listOf("http", "https") && !endpoint.host.isNullOrBla
     && endpoint.rawQuery == null && endpoint.rawFragment == null
     && endpoint.port in -1..65535) { "SP_SERVER_URL must be an HTTP(S) origin without credentials, path, query or fragment" }
 val serverOrigin = endpoint.toString().trimEnd('/')
+val updateUrl = URI(System.getenv("SP_ANDROID_UPDATE_URL")?.trim()
+    ?: "$serverOrigin/updates/android.json")
+require((updateUrl.scheme == "https" || (updateUrl.scheme == "http" && endpoint.scheme == "http"
+    && updateUrl.host == endpoint.host && updateUrl.port == endpoint.port))
+    && !updateUrl.host.isNullOrBlank() && updateUrl.rawUserInfo == null && updateUrl.rawFragment == null
+    && updateUrl.port in -1..65535 && !updateUrl.toString().contains('"') && !updateUrl.toString().contains('\\')) {
+    "SP_ANDROID_UPDATE_URL must use HTTPS, or the same HTTP server origin"
+}
 
 val preinstalledAssets = layout.buildDirectory.dir("generated/preinstalled-assets")
 val prepareStaticAssets = tasks.register<Exec>("prepareStaticAssets") {
@@ -34,9 +42,10 @@ android {
         minSdk = 24
         targetSdk = 37
         // Upgrade both the earlier Tauri APK (1003) and the WebView-only APK (1004).
-        versionCode = 1012
+        versionCode = 1013
         versionName = "0.2.4"
         buildConfigField("String", "SERVER_URL", "\"$serverOrigin\"")
+        buildConfigField("String", "ANDROID_UPDATE_URL", "\"$updateUrl\"")
         manifestPlaceholders["usesCleartextTraffic"] = (endpoint.scheme == "http").toString()
     }
     buildTypes {
