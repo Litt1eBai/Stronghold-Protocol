@@ -40,8 +40,16 @@ describe('make-windows-bundle.mjs: --out 不能指向仓库自己或它的上级
     const { outDirIsUnsafe } = await mod('scripts/make-windows-bundle.mjs');
     // Linux 的默认文件系统区分大小写：`/HOME/X` 就是另一个目录，放行才对。
     const sameThing = process.platform !== 'linux';
-    assert.equal(outDirIsUnsafe(ROOT.toUpperCase()), sameThing, `大写写法的仓库路径（${ROOT.toUpperCase()}）`);
-    assert.equal(outDirIsUnsafe(ROOT.replace(/\//g, path.sep).toLowerCase()), sameThing, '全小写写法');
+    // CNB 的仓库路径 /workspace 全是小写，不能用它验证大小写发生变化的情况。
+    const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'sp-CaseTest-'));
+    const root = path.join(base, 'Stronghold-Protocol');
+    try {
+      await fsp.mkdir(root);
+      assert.equal(outDirIsUnsafe(root.toUpperCase(), root), sameThing, '大写写法');
+      assert.equal(outDirIsUnsafe(root.toLowerCase(), root), sameThing, '全小写写法');
+    } finally {
+      await fsp.rm(base, { recursive: true, force: true });
+    }
   });
 
   test('经过符号链接的路径会被认出来（macOS 的 /tmp 就是指向 /private/tmp 的链接）', async () => {

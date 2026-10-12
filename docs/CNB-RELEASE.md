@@ -52,11 +52,11 @@ SSH 端口与游戏公网端口不同。流水线复用现有服务、Node.js �
 
 1. 修改 `client/android/app/build.gradle.kts` 的 `versionName` 和递增的 `versionCode`；每次原生发布都必须增加编号。
 2. 更新 `.cnb/release-notes.txt`，提交代码并同步到 CNB。
-3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.4-1013`，推送到 CNB：
+3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.4-1014`，推送到 CNB：
 
 ```bash
-git tag android-v0.2.4-1013
-git push cnb android-v0.2.4-1013
+git tag android-v0.2.4-1014
+git push cnb android-v0.2.4-1014
 ```
 
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
