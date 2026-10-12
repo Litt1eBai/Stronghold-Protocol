@@ -49,7 +49,7 @@ master:
         - name: Verify release identity
           script: node tools/cnb-release.mjs identity
         - name: Prepare required art and skins
-          script: node tools/fetch-assets.mjs --strict && node tools/prepare-skins.mjs
+          script: node tools/prepare-release-assets.mjs
         - name: Verify code
           script: npm run ci && npm run golden
         - name: Build and sign Android

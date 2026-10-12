@@ -53,17 +53,19 @@ SSH 端口与游戏公网端口不同。流水线复用现有服务、Node.js �
 
 1. 修改 `client/android/app/build.gradle.kts` 的 `versionName` 和递增的 `versionCode`；每次原生发布都必须增加编号。
 2. 更新 `.cnb/release-notes.txt`，提交代码并同步到 CNB。
-3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.4-1015`，推送到 CNB：
+3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.4-1016`，推送到 CNB：
 
 ```bash
-git tag android-v0.2.4-1015
-git push cnb android-v0.2.4-1015
+git tag android-v0.2.4-1016
+git push cnb android-v0.2.4-1016
 ```
 
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
 不要在旧源码上创建标签。流水线会拒绝与 Android 版本不匹配的标签。
 
 流水线先下载素材和皮肤，再验证代码和 golden，然后构建、签名并上传 APK。
+`prepare-release-assets.mjs` 保留下载器的清单缩减保护和必需素材检查，并验证下载前后两份发布清单的全部文件引用。
+最新上游索引额外计划下载、但发布清单没有引用的资源，可以报告缺失；发布清单已引用的文件缺失、为空或为符号链接时必须失败。
 它从 CNB API 读取实际下载地址生成 `android.json`，打包服务端依赖，校验上传包 SHA-256 后切换 `current` 并重启服务。
 服务端和 APK 同一发布所需的更新公告位于 `/updates/android.json`，随服务端一起切换。
 内部和公网健康检查必须与新包的应用版本、构建指纹一致，公网更新公告也必须一致。
