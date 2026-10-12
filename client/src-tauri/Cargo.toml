@@ -1,6 +1,6 @@
 [package]
 name = "stronghold-protocol-client"
-version = "0.2.3"
+version = "0.2.4"
 description = "Stronghold Protocol unified Tauri client"
 authors = ["Stronghold Protocol contributors"]
 edition = "2021"

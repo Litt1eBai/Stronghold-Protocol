@@ -34,6 +34,8 @@ test('settings are available after login, including Android adaptation of older 
       await page.waitForSelector('.lobby-settings', { visible: true });
       if (android) {
         await page.waitForFunction(() => window.shellReports.some(s => s.loggedIn));
+        assert.ok(await page.$('.lobby-screen .topbar__tools .lobby-settings'), 'the upstream lobby puts settings in its left toolbar');
+        assert.equal(await page.$$eval('.lobby-settings, .sp-shell-settings', es => es.length), 1, 'the shell recognizes the relocated web settings button');
         // An old deployed lobby lacks this entry. The shell must supply one
         // without replacing that server's account or settings implementation.
         await page.evaluate(() => document.querySelector('.lobby-settings').remove());

@@ -27,7 +27,8 @@ test('required account: bad password stays on login, password login and saved JW
       await page.type('.title-login input[type="password"]', 'wrong');
       const start = () => page.evaluate(() => document.querySelector('.title-login .btn--primary').click());
       await start();
-      await page.waitForFunction(() => window.__SP__?.store.get().session.entered === false);
+      await page.waitForFunction(() => window.__SP__?.net.lastError?.code === 'AUTH_INVALID'
+        && window.__SP__.store.get().session.entered === false);
       assert.equal(await page.$('.lobby-settings'), null);
       await page.$eval('.title-login input[type="password"]', el => { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.type('.title-login input[type="password"]', 'example-password');

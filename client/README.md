@@ -66,10 +66,15 @@ Outputs:
 
 The Android APK contains no ABI-specific native libraries and runs on Android 7+
 with a sufficiently recent system WebView. It keeps `com.strongholdprotocol.client`
-and uses version 0.1.4 and version code 1009 (Tauri used 1003, the WebView-only APK used 1004, the first asset bundle used 1005, the skin bundle used 1006, the first 0.1.4 build used 1007). An update
+and uses version 0.2.4 and version code 1012 (the 0.2.3 build used 1011, Tauri used 1003,
+and the WebView-only APK used 1004). An update
 can be installed over that APK with the same key; the change from the bundled
 `tauri.localhost` page to the actual server origin requires logging in again.
 Existing server accounts and progress remain available.
+
+The Android shell recognizes the settings button anywhere in the lobby or room
+header, including the left toolbar introduced in 0.2.4. It adds a fallback entry
+only when the deployed page has no settings button.
 
 ## Preinstalled static assets
 

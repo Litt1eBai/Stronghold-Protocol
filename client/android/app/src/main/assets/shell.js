@@ -30,16 +30,17 @@
   };
   const adaptSettings = () => {
     if (!loggedIn()) { closeSettings?.(); return; }
-    const header = document.querySelector('.lobby-screen .topbar__right, .room-screen .topbar__right');
+    const header = document.querySelector('.lobby-screen .topbar, .room-screen .topbar');
+    const tools = header?.querySelector('.topbar__tools, .topbar__right');
     // Login changes the store before Preact commits the new header. A fallback
     // added in that gap must be removed when the web-owned button arrives.
     if (header?.querySelector('.lobby-settings, .room-settings')) {
       header.querySelectorAll('.sp-shell-settings').forEach(button => button.remove());
-    } else if (header && !header.querySelector('.sp-shell-settings')) {
+    } else if (tools && !header.querySelector('.sp-shell-settings')) {
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'btn btn--secondary btn--sm sp-shell-settings';
       button.textContent = '设置'; button.addEventListener('click', openSettings);
-      header.prepend(button);
+      tools.prepend(button);
     }
     document.querySelectorAll('.set-hint').forEach(hint => {
       hint.classList.toggle('sp-shell-shortcuts', Boolean(hint.querySelector('kbd')));
