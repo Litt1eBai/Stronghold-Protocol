@@ -66,7 +66,7 @@ Outputs:
 
 The Android APK contains no ABI-specific native libraries and runs on Android 7+
 with a sufficiently recent system WebView. It keeps `com.strongholdprotocol.client`
-and uses version 0.2.4 and version code 1017 (the initial updater build used 1013, the initial 0.2.4 build used 1012, the 0.2.3 build used 1011, Tauri used 1003,
+and uses version 0.2.4 and version code 1018 (the initial updater build used 1013, the initial 0.2.4 build used 1012, the 0.2.3 build used 1011, Tauri used 1003,
 and the WebView-only APK used 1004). An update
 can be installed over that APK with the same key; the change from the bundled
 `tauri.localhost` page to the actual server origin requires logging in again.
@@ -93,7 +93,7 @@ The announcement uses this format:
 {
   "format": 1,
   "applicationId": "com.strongholdprotocol.client",
-  "versionCode": 1017,
+  "versionCode": 1018,
   "versionName": "0.2.4",
   "apkUrl": "https://downloads.example.com/Stronghold-Protocol-release.apk",
   "sha256": "SHA256_OF_THE_SIGNED_APK_AS_64_HEX_CHARACTERS",

@@ -77,7 +77,8 @@ async function main() {
     const api = new URL(process.env.CNB_API_ENDPOINT || 'https://api.cnb.cool');
     if (api.protocol !== 'https:' || api.username || api.password) throw new Error('CNB API must use HTTPS');
     const response = await fetch(new URL(`/${slug}/-/releases/tags/${encodeURIComponent(tag)}`, api), {
-      headers: { Authorization: `Bearer ${process.env.CNB_TOKEN || ''}` }, redirect: 'error', signal: AbortSignal.timeout(30000) });
+      headers: { Authorization: `Bearer ${process.env.CNB_TOKEN || ''}`, Accept: 'application/json' },
+      redirect: 'error', signal: AbortSignal.timeout(30000) });
     if (!response.ok) throw new Error(`Could not read published release (HTTP ${response.status})`);
     const release = await response.json();
     // Get the local size/hash before accepting the API's URL.
