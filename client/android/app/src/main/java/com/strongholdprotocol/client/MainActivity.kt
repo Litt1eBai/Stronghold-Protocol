@@ -21,7 +21,6 @@ import android.view.WindowManager
 import android.webkit.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -239,27 +238,21 @@ class MainActivity : AppCompatActivity() {
         DisplayHelper.apply(window, prefs.getBoolean("high_refresh", true))
     }
 
+    fun getDisplaySettings(): String = JSONObject()
+        .put("highRefresh", prefs.getBoolean("high_refresh", true))
+        .put("edgePaddingPx", prefs.getInt("edge_padding_px", 0).coerceIn(0, 200)).toString()
+
+    fun setDisplaySettings(highRefresh: Boolean, edgePaddingPx: Int) {
+        prefs.edit().putBoolean("high_refresh", highRefresh)
+            .putInt("edge_padding_px", edgePaddingPx.coerceIn(0, 200)).apply()
+        applyDisplaySettings()
+    }
+
+    fun checkAppUpdate() = updater.check(manual = true)
+
     fun showSettings() {
-        if (!loggedIn) return
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 16, 32, 16) }
-        val refresh = SwitchCompat(this).apply { text = "使用屏幕最高刷新率"; isChecked = prefs.getBoolean("high_refresh", true) }
-        content.addView(refresh)
-        val label = TextView(this).apply { text = "左右屏幕边距（避开刘海）：${prefs.getInt("edge_padding_px", 0)} px" }
-        content.addView(label)
-        val padding = SeekBar(this).apply { max = 200; progress = prefs.getInt("edge_padding_px", 0) }
-        padding.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) { label.text = "左右屏幕边距（避开刘海）：$value px" }
-            override fun onStartTrackingTouch(bar: SeekBar?) {}
-            override fun onStopTrackingTouch(bar: SeekBar?) {}
-        })
-        content.addView(padding)
-        button(content, "检查应用更新（${BuildConfig.VERSION_NAME}）") { updater.check(manual = true) }
-        AlertDialog.Builder(this).setTitle("安卓屏幕设置").setView(content)
-            .setPositiveButton("应用") { _, _ ->
-                prefs.edit().putBoolean("high_refresh", refresh.isChecked)
-                    .putInt("edge_padding_px", padding.progress).apply()
-                applyDisplaySettings()
-            }.setNegativeButton("取消", null).show()
+        if (!loggedIn || !pageReady) return
+        webView.evaluateJavascript("window.__SP_OPEN_SETTINGS__?.()", null)
     }
 
     fun showLogs() {
@@ -342,13 +335,12 @@ class MainActivity : AppCompatActivity() {
         if (!loggedIn) {
             AlertDialog.Builder(this).setTitle("退出卫戍协议？")
                 .setPositiveButton("退出") { _, _ -> finish() }
-                .setNeutralButton("检查更新") { _, _ -> updater.check(manual = true) }
                 .setNegativeButton("取消", null).show()
             return
         }
         AlertDialog.Builder(this).setTitle("卫戍协议")
-            .setItems(arrayOf("安卓屏幕设置", "检查应用更新", "诊断与日志", "刷新页面", "故障恢复", "退出")) { _, which ->
-                when (which) { 0 -> showSettings(); 1 -> updater.check(manual = true); 2 -> showLogs(); 3 -> loadServer(); 4 -> showRecovery(); 5 -> finish() }
+            .setItems(arrayOf("设置", "诊断与日志", "刷新页面", "故障恢复", "退出")) { _, which ->
+                when (which) { 0 -> showSettings(); 1 -> showLogs(); 2 -> loadServer(); 3 -> showRecovery(); 4 -> finish() }
             }.setNegativeButton("继续游戏", null).show()
     }
     private fun showRecovery() {

@@ -68,7 +68,7 @@ async function main() {
   if (process.argv[2] === 'identity') {
     const notePath = new URL('../.cnb/release-notes.txt', import.meta.url);
     const notes = await readFile(notePath, 'utf8');
-    await writeFile(`${out}/release-notes.txt`, `${tag}\n\n${notes}`);
+    await writeFile(`${out}/release-notes.txt`, `${notes.trim()}\n`);
     await writeFile(`${out}/identity.json`, `${JSON.stringify(identity)}\n`);
     console.log(`Validated ${tag}`);
   } else if (process.argv[2] === 'announcement') {

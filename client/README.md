@@ -66,7 +66,7 @@ Outputs:
 
 The Android APK contains no ABI-specific native libraries and runs on Android 7+
 with a sufficiently recent system WebView. It keeps `com.strongholdprotocol.client`
-and uses version 0.2.5 and version code 1019 (the initial updater build used 1013, the initial 0.2.4 build used 1012, the 0.2.3 build used 1011, Tauri used 1003,
+and uses version 0.2.5 and version code 1020 (the initial updater build used 1013, the initial 0.2.4 build used 1012, the 0.2.3 build used 1011, Tauri used 1003,
 and the WebView-only APK used 1004). An update
 can be installed over that APK with the same key; the change from the bundled
 `tauri.localhost` page to the actual server origin requires logging in again.
@@ -75,9 +75,13 @@ Existing server accounts and progress remain available.
 ## Android application updates
 
 The native shell checks for updates once on startup. A manual check is available in
-Android screen settings, the Back-button menu, and the pre-login exit dialog.
+the shared game settings modal. The Back-button menu opens this same modal.
 Checking errors are silent at startup; manual checks show the result. Downloads
-show progress and can be cancelled. They never reload the game page.
+show progress and can be cancelled. They never reload the game page. Announcement notes contain version changes only,
+without release tags or deployment instructions. Logs and APKs use distinct
+FileProvider components; installation preflights the APK through ContentResolver
+and logs launch errors. Older APKs with duplicate provider classes may need one
+manual browser installation of the fixed APK.
 
 `SP_ANDROID_UPDATE_URL` optionally selects the announcement URL at build time.
 The default is `${SP_SERVER_URL}/updates/android.json`. Use HTTPS, or the same
@@ -93,7 +97,7 @@ The announcement uses this format:
 {
   "format": 1,
   "applicationId": "com.strongholdprotocol.client",
-  "versionCode": 1019,
+  "versionCode": 1020,
   "versionName": "0.2.5",
   "apkUrl": "https://downloads.example.com/Stronghold-Protocol-release.apk",
   "sha256": "SHA256_OF_THE_SIGNED_APK_AS_64_HEX_CHARACTERS",
@@ -163,14 +167,15 @@ preinstalled art does not make this an offline game.
 
 Startup connects silently to the compiled server without a native connection screen.
 Settings are available after login in the lobby, room and match. Game quality and
-audio use the shared web settings; Android screen settings only adjust refresh
-rate and safe-area padding, without reloading the page. After login, the Android
-Back button opens screen settings, diagnostics, refresh, recovery and exit. The shell provides immersive
+audio, Android refresh rate, safe-area padding and manual update checks all use
+the same settings modal. Display changes apply immediately, persist in native
+preferences and never reload the page. After login, the Android Back button opens
+settings, diagnostics, refresh, recovery and exit. The shell provides immersive
 landscape mode, audio focus, high refresh rates, configurable screen-edge padding,
 rotating file logs and log sharing. Connection failures offer retry and diagnostics.
 
-The shell injects a readiness adapter into the original web client; no Android
-changes need to be deployed on the server. If the client fails to boot, a native
+The shell injects a readiness adapter into the web client. Inline Android controls
+require the matching server/web settings and native bridge (version code 1020 or later). If the client fails to boot, a native
 dialog offers compatibility mode, which reloads with `?render=fallback&board=2d`
 and a software WebView layer. This also handles older GPU/WebView failures.
 

@@ -4,6 +4,12 @@ Part of [DESIGN.md](../DESIGN.md) (the index; section numbers are global).
 
 ## 9. Client rendering contract (public/js/render)
 
+Android shell settings: after login, the shared settings modal contains screen refresh rate, 0–200 px
+side padding and a manual app-update check. Display changes persist in native preferences and apply
+without reloading the page. The Back menu opens this same modal; there is no separate screen/update
+settings dialog. Startup still checks for updates. Update announcement notes contain version changes
+only. Log sharing and APK installation use distinct FileProvider components and path scopes.
+
 Bond-layer audio (#482): live own preparation gains arrive as `m.layer`; the displayed battle's `layer` tuples
 play the same `bondUp` cue. A gain of several layers plays once, including gains to inactive bonds. The official
 `ON_ACT1AUTOCHESS_ADD_BOND` bank allows one sound and replaces the oldest; there is no added cooldown. Existing

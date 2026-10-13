@@ -143,7 +143,7 @@ class AppUpdater(private val activity: MainActivity) {
                 }
             } catch (e: Exception) {
                 part.delete(); apk.delete()
-                FileLogger.e("update", "download failed: ${e.javaClass.simpleName}")
+                FileLogger.e("update", "Download or validation failed: ${e.javaClass.simpleName}: ${e.message}")
                 ui {
                     busy = false; dialog?.dismiss()
                     if (!cancelled.get()) message("更新失败", e.message ?: "请稍后重试")
@@ -164,6 +164,7 @@ class AppUpdater(private val activity: MainActivity) {
         }
         val code = if (Build.VERSION.SDK_INT >= 28) archive.longVersionCode else archive.versionCode.toLong()
         verifyArchive(release, archive.packageName, code, signers(installed), signers(archive))
+        FileLogger.i("update", "APK verified: ${archive.packageName}, versionCode=$code, Android=${Build.VERSION.SDK_INT}")
     }
 
     private fun confirmInstall() {
@@ -182,13 +183,21 @@ class AppUpdater(private val activity: MainActivity) {
                 return
             }
             val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.updates", apk)
+            // Resolve through the real provider before handing the URI to another app.
+            activity.contentResolver.openFileDescriptor(uri, "r")?.use {
+                check(it.statSize == apk.length()) { "安装器无法读取完整的更新包" }
+            } ?: error("无法打开更新包")
+            FileLogger.i("update", "Opening system installer for verified APK (${apk.length()} bytes)")
             activity.startActivity(Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 clipData = ClipData.newRawUri("APK", uri)
             })
             pendingInstall = null
-        } catch (_: Exception) { message("无法打开安装界面", "请允许本应用安装更新，或从发布页面手动下载安装包") }
+        } catch (e: Exception) {
+            FileLogger.e("update", "Installer launch failed: ${e.javaClass.simpleName}: ${e.message}")
+            message("无法打开安装界面", "${e.message ?: e.javaClass.simpleName}\n可重试安装，或从发布页面手动下载安装包。")
+        }
     }
 
     fun onResume() {

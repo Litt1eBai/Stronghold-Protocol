@@ -231,6 +231,44 @@ function DiagSection() {
   </section>`;
 }
 
+/** Android controls live in this same modal; only their persistence and application are native. */
+function AndroidSettings() {
+  const native = globalThis.AndroidNative;
+  const [s, setNative] = useState(() => {
+    if (!native?.getDisplaySettings || !native?.setDisplaySettings || !native?.checkAppUpdate) return null;
+    try {
+      const current = JSON.parse(native.getDisplaySettings());
+      if (typeof current.highRefresh !== 'boolean' || !Number.isInteger(current.edgePaddingPx)
+          || current.edgePaddingPx < 0 || current.edgePaddingPx > 200) return null;
+      return current;
+    } catch { return null; }
+  });
+  if (!s) return null;
+  const update = (patch) => {
+    const next = { ...s, ...patch };
+    native.setDisplaySettings(next.highRefresh, next.edgePaddingPx);
+    setNative(next);
+  };
+  return html`<section class="set-native" data-testid="native-settings">
+    <${Toggle} label=${t('使用屏幕最高刷新率')} micro="REFRESH RATE" value=${s.highRefresh}
+      onChange=${(highRefresh) => update({ highRefresh })} />
+    <label class="set-row">
+      <span class="set-row__label">${t('左右屏幕边距')}<${MicroLabel}>SAFE AREA<//></span>
+      <input class="set-range" type="range" min="0" max="200" step="1" value=${s.edgePaddingPx}
+        data-testid="native-edge-padding" style=${`--pct:${s.edgePaddingPx / 2}%`}
+        onInput=${(e) => update({ edgePaddingPx: Number(e.currentTarget.value) })} />
+      <span class="set-row__val num">${s.edgePaddingPx} px</span>
+    </label>
+    <p class="set-hint">${t('调整左右屏幕边距，避开刘海。')}</p>
+    <div class="set-keys__head">
+      <span class="set-row__label">${t('应用更新')}<${MicroLabel}>APP UPDATE<//></span>
+      <${Button} variant="secondary" size="sm" data-testid="native-check-update"
+        onClick=${() => native.checkAppUpdate()}>${t('检查更新')}<//>
+    </div>
+    <p class="set-hint">${t('当前版本：{version}', { version: native.getAppVersion() })}</p>
+  </section>`;
+}
+
 /**
  * Settings modal.
  * @param {{ open: boolean, onClose: Function }} props
@@ -243,8 +281,6 @@ export function SettingsModal({ open, onClose }) {
   return html`<${Modal} open=${open} onClose=${onClose} title=${t('设置')} micro="SETTINGS" width="7.4rem"
     actions=${html`<${Button} variant="primary" icon="check" onClick=${onClose}>${t('完成')}<//>`}>
     <div class="set-list">
-      ${globalThis.AndroidNative?.openServerSettings ? html`<${Button} variant="secondary" class="native-display-settings"
-        onClick=${() => globalThis.AndroidNative.openServerSettings()}>${t('安卓屏幕设置')}<//>` : null}
       <div class="set-row">
         <span class="set-row__label">${t('语言')}<${MicroLabel}>LANGUAGE<//></span>
         <${LangToggle} class="set-lang" />
@@ -280,6 +316,7 @@ export function SettingsModal({ open, onClose }) {
         </div>
       </div>
       <p class="set-hint set-textsize-note">${t('调整界面文字大小，棋盘保持原比例。')}</p>
+      <${AndroidSettings} />
       <${HotkeySection} keys=${s.keys} touchUi=${touchUi} />
       <${DiagSection} />
       <p class="set-hint">${touchUi ? t('触屏操作：点击单位选中（撤退 / 出售）· 长按单位或卡牌查看详情 · 拖动部署后滑动选择朝向') : t('右键查看详情')}</p>

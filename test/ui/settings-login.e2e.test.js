@@ -18,10 +18,19 @@ test('settings are available after login, including Android adaptation of older 
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       await page.setViewport(android ? { width: 844, height: 390, hasTouch: true, isMobile: true } : { width: 1440, height: 900 });
       if (android) await page.evaluateOnNewDocument(() => {
-        window.shellReports = []; window.nativeSettingsCalls = 0;
+        window.shellReports = []; window.nativeUpdateCalls = 0;
+        window.nativeDisplay = { highRefresh: true, edgePaddingPx: 0 };
+        window.nativeDisplayWrites = [];
         window.AndroidNative = {
           reportClientState: json => window.shellReports.push(JSON.parse(json)),
-          openServerSettings: () => { window.nativeSettingsCalls++; },
+          getDisplaySettings: () => JSON.stringify(window.nativeDisplay),
+          setDisplaySettings: (highRefresh, edgePaddingPx) => {
+            window.nativeDisplay = { highRefresh, edgePaddingPx };
+            window.nativeDisplayWrites.push({ highRefresh, edgePaddingPx });
+          },
+          checkAppUpdate: () => { window.nativeUpdateCalls++; },
+          getAppVersion: () => '0.2.5',
+          openServerSettings: () => { throw new Error('Independent native settings must not open'); },
         };
       });
       await page.goto(`http://127.0.0.1:${srv.port}/`, { waitUntil: 'domcontentloaded' });
@@ -67,23 +76,23 @@ test('settings are available after login, including Android adaptation of older 
         });
         await page.waitForFunction(() => [...document.querySelectorAll('.set-hint')].filter(e => e.querySelector('kbd')).every(e => getComputedStyle(e).display === 'none'));
         assert.equal(await page.$eval('.set-guide', e => getComputedStyle(e).display), 'none');
-        // The native display entry needs the same late-arrival reconciliation.
-        await page.evaluate(() => {
-          window.savedNativeButton = document.querySelector('.native-display-settings');
-          window.savedNativeButton.remove();
+        await page.waitForSelector('[data-testid="native-settings"]', { visible: true });
+        assert.equal(await page.$('.native-display-settings, .sp-shell-display-settings'), null);
+        await page.click('[data-testid="native-settings"] [role="switch"]');
+        await page.waitForFunction(() => window.nativeDisplay.highRefresh === false);
+        await page.$eval('[data-testid="native-edge-padding"]', el => {
+          el.value = '80'; el.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        await page.waitForSelector('.sp-shell-display-settings', { visible: true });
-        await page.evaluate(() => document.querySelector('.set-list').prepend(window.savedNativeButton));
-        await page.waitForFunction(() => !document.querySelector('.sp-shell-display-settings'));
-        assert.equal(await page.$$eval('.native-display-settings', es => es.length), 1);
+        await page.waitForFunction(() => window.nativeDisplay.edgePaddingPx === 80);
+        assert.deepEqual(await page.evaluate(() => window.nativeDisplay), { highRefresh: false, edgePaddingPx: 80 });
+        await page.click('[data-testid="native-check-update"]');
+        assert.equal(await page.evaluate(() => window.nativeUpdateCalls), 1);
+        // The Back menu must reuse an existing settings modal, never stack another one.
+        await page.evaluate(() => window.__SP_OPEN_SETTINGS__());
+        assert.equal(await page.$$eval('.modal .set-list', es => es.length), 1);
       }
       await page.$eval('.set-range', el => { el.value = '35'; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.waitForFunction(() => JSON.parse(localStorage.getItem('sp.pref.settings')).bgm === 0.35);
-      if (android) {
-        await page.click('.native-display-settings');
-        assert.equal(await page.evaluate(() => window.nativeSettingsCalls), 1);
-        assert.equal(await page.$$eval('.native-display-settings', es => es.length), 1);
-      }
       await page.evaluate(() => [...document.querySelectorAll('.modal__actions button')].find(b => b.textContent.trim() === '完成').click());
       await page.waitForFunction(() => !document.querySelector('.modal'));
       await page.evaluate(() => window.__SP__.net.request('room.create', { mode: 'solo', difficulty: 'NORMAL' }));
@@ -94,6 +103,10 @@ test('settings are available after login, including Android adaptation of older 
       }
       await page.click('.room-settings');
       await page.waitForSelector('.modal .set-range', { visible: true });
+      if (android) {
+        assert.equal(await page.$eval('[data-testid="native-edge-padding"]', el => el.value), '80');
+        assert.equal(await page.$eval('[data-testid="native-settings"] [role="switch"]', el => el.getAttribute('aria-checked')), 'false');
+      } else assert.equal(await page.$('[data-testid="native-settings"]'), null);
       await page.evaluate(() => [...document.querySelectorAll('.modal__actions button')].find(b => b.textContent.trim() === '完成').click());
       await page.evaluate(() => window.__SP__.store.set({ session: { entered: false } }));
       await page.waitForSelector('.title-screen', { visible: true });

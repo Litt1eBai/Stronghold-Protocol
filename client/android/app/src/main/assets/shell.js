@@ -16,18 +16,19 @@
   // Older deployed pages have no lobby settings entry. Reuse their shared modal
   // until the updated web files are deployed, without duplicating its controls.
   const openSettings = async () => {
-    if (!loggedIn() || settingsHost) return;
+    if (!loggedIn() || settingsHost || document.querySelector('.modal .set-list')) return;
     try {
       const [{ h, render }, { SettingsModal }] = await Promise.all([
         import('/vendor/preact.module.js'), import('/js/ui/settings.js'),
       ]);
-      if (!loggedIn() || settingsHost) return;
+      if (!loggedIn() || settingsHost || document.querySelector('.modal .set-list')) return;
       settingsHost = document.createElement('div');
       document.body.appendChild(settingsHost);
       closeSettings = () => { render(null, settingsHost); settingsHost.remove(); settingsHost = null; closeSettings = null; };
       render(h(SettingsModal, { open: true, onClose: closeSettings }), settingsHost);
     } catch (error) { report({ error: String(error) }); }
   };
+  window.__SP_OPEN_SETTINGS__ = openSettings;
   const adaptSettings = () => {
     if (!loggedIn()) { closeSettings?.(); return; }
     const header = document.querySelector('.lobby-screen .topbar, .room-screen .topbar');
@@ -45,16 +46,6 @@
     document.querySelectorAll('.set-hint').forEach(hint => {
       hint.classList.toggle('sp-shell-shortcuts', Boolean(hint.querySelector('kbd')));
     });
-    const list = document.querySelector('.set-list');
-    if (list?.querySelector('.native-display-settings:not(.sp-shell-display-settings)')) {
-      list.querySelectorAll('.sp-shell-display-settings').forEach(button => button.remove());
-    } else if (list && !list.querySelector('.native-display-settings')) {
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'btn btn--secondary native-display-settings sp-shell-display-settings';
-      button.textContent = '安卓屏幕设置';
-      button.addEventListener('click', () => window.AndroidNative.openServerSettings());
-      list.prepend(button);
-    }
   };
   const adaptAccountLayout = () => {
     if (layoutInstalled || !document.head) return;
