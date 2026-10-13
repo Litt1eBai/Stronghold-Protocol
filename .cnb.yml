@@ -67,7 +67,7 @@ master:
           image: cnbcool/attachments:latest
           settings:
             attachments:
-              - client/artifacts/android/Stronghold-Protocol-release.apk
+              - client/artifacts/android/Stronghold-Protocol-v*.apk
               - client/artifacts/android/SHA256SUMS
               - client/artifacts/android/release-notes.txt
         - name: Verify public download and generate announcement

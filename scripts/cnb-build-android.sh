@@ -15,11 +15,14 @@ chmod 600 "$secret_dir"/*
 (cd client/android && sh gradlew --no-daemon testDebugUnitTest assembleRelease)
 out=client/artifacts/android
 mkdir -p "$out"
+apk_name=$(node tools/cnb-release.mjs apk-name)
 tools="${ANDROID_HOME:?}/build-tools/36.0.0"
 "$tools/zipalign" -f -P 16 4 client/android/app/build/outputs/apk/release/app-release-unsigned.apk "$secret_dir/aligned.apk"
 "$tools/apksigner" sign --ks "$secret_dir/release.jks" --ks-key-alias "$ANDROID_KEY_ALIAS" \
     --ks-pass "file:$secret_dir/store-password" --key-pass "file:$secret_dir/key-password" \
-    --out "$out/Stronghold-Protocol-release.apk" "$secret_dir/aligned.apk"
-"$tools/apksigner" verify --verbose "$out/Stronghold-Protocol-release.apk"
-"$tools/zipalign" -c -P 16 4 "$out/Stronghold-Protocol-release.apk"
-(cd "$out" && sha256sum Stronghold-Protocol-release.apk > SHA256SUMS)
+    --out "$out/$apk_name" "$secret_dir/aligned.apk"
+"$tools/apksigner" verify --verbose "$out/$apk_name"
+"$tools/zipalign" -c -P 16 4 "$out/$apk_name"
+"$tools/aapt2" dump xmltree "$out/$apk_name" --file AndroidManifest.xml > "$out/apk-manifest.txt"
+node tools/cnb-release.mjs verify-apk
+(cd "$out" && sha256sum "$apk_name" > SHA256SUMS)

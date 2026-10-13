@@ -15,8 +15,28 @@ export function releaseIdentity(gradle, tag) {
   return { applicationId, versionCode, versionName, minSdk };
 }
 
-export function releaseAsset(release, expectedSize) {
-  const asset = release.assets?.find((a) => a.name === 'Stronghold-Protocol-release.apk');
+export function releaseApkName({ versionName, versionCode }) {
+  if (typeof versionName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(versionName) || !Number.isSafeInteger(versionCode)
+      || versionCode < 1 || versionCode > 2147483647) throw new Error('Invalid APK filename version');
+  return `Stronghold-Protocol-v${versionName}-${versionCode}.apk`;
+}
+
+/** Validate the signed APK's compiled manifest, rather than deriving its identity from build source. */
+export function verifyApkIdentity(tree, expected) {
+  const number = (name) => Number(tree.match(new RegExp(`A: [^\\n]*:${name}\\(0x[0-9a-f]+\\)=(0x[0-9a-f]+|[0-9]+)\\s*$`, 'im'))?.[1]);
+  const actual = {
+    applicationId: tree.match(/^\s*A: package="([^"]+)"/m)?.[1],
+    versionName: tree.match(/A: [^\n]*:versionName\(0x[0-9a-f]+\)="([^"]+)"/i)?.[1],
+    versionCode: number('versionCode'), minSdk: number('minSdkVersion'),
+  };
+  for (const key of ['applicationId', 'versionName', 'versionCode', 'minSdk']) {
+    if (actual[key] !== expected[key]) throw new Error(`Signed APK ${key} does not match release identity`);
+  }
+  return actual;
+}
+
+export function releaseAsset(release, expectedSize, expectedName = 'Stronghold-Protocol-release.apk') {
+  const asset = release.assets?.find((a) => a.name === expectedName);
   if (!asset || asset.size !== expectedSize || typeof asset.browser_download_url !== 'string') throw new Error('Published APK is missing or has the wrong size');
   const url = new URL(asset.browser_download_url);
   if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error('Published APK needs a public HTTPS URL');
@@ -65,7 +85,12 @@ async function main() {
   const identity = releaseIdentity(gradle, tag);
   const out = 'client/artifacts/android';
   await mkdir(out, { recursive: true });
-  if (process.argv[2] === 'identity') {
+  if (process.argv[2] === 'apk-name') {
+    console.log(releaseApkName(identity));
+  } else if (process.argv[2] === 'verify-apk') {
+    verifyApkIdentity(await readFile(`${out}/apk-manifest.txt`, 'utf8'), identity);
+    console.log(`Signed APK identity verified: ${identity.versionName} (${identity.versionCode})`);
+  } else if (process.argv[2] === 'identity') {
     const notePath = new URL('../.cnb/release-notes.txt', import.meta.url);
     const notes = await readFile(notePath, 'utf8');
     await writeFile(`${out}/release-notes.txt`, `${notes.trim()}\n`);
@@ -83,13 +108,14 @@ async function main() {
     const release = await response.json();
     // Get the local size/hash before accepting the API's URL.
     const notes = await readFile(`${out}/release-notes.txt`, 'utf8');
-    const manifest = await androidRelease({ ...identity, apk: `${out}/Stronghold-Protocol-release.apk`,
+    const apkName = releaseApkName(identity);
+    const manifest = await androidRelease({ ...identity, apk: `${out}/${apkName}`,
       url: 'https://invalid.example/placeholder.apk', notes });
-    manifest.apkUrl = releaseAsset(release, manifest.size);
+    manifest.apkUrl = releaseAsset(release, manifest.size, apkName);
     await verifyPublicApk(manifest.apkUrl, manifest.size);
     await writeFile(`${out}/android.json`, `${JSON.stringify(manifest, null, 2)}\n`);
     console.log('Public APK verified; Android announcement generated');
-  } else throw new Error('Use identity or announcement');
+  } else throw new Error('Use identity, apk-name, verify-apk or announcement');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

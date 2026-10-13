@@ -1,12 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { releaseIdentity, releaseAsset, verifyPublicApk } from '../tools/cnb-release.mjs';
+import { releaseIdentity, releaseApkName, verifyApkIdentity, releaseAsset, verifyPublicApk } from '../tools/cnb-release.mjs';
 
 const gradle = 'applicationId = "com.strongholdprotocol.client"\nversionCode = 1013\nversionName = "0.2.4"\nminSdk = 24';
 test('only a native release tag matching the actual APK version is accepted', () => {
   assert.equal(releaseIdentity(gradle, 'android-v0.2.4-1013').versionCode, 1013);
   for (const tag of ['v0.2.4', 'android-v0.2.4-1012', 'android-v0.2.5-1013', '../bad']) {
     assert.throws(() => releaseIdentity(gradle, tag), /Release tag/);
+  }
+});
+
+test('APK filenames distinguish native releases and published lookup rejects an older generic file', () => {
+  const name = releaseApkName({ versionName: '0.2.5', versionCode: 1020 });
+  assert.equal(name, 'Stronghold-Protocol-v0.2.5-1020.apk');
+  assert.notEqual(name, releaseApkName({ versionName: '0.2.5', versionCode: 1021 }));
+  for (const versionName of ['../bad', 'a/b', 'bad name', '', null, undefined]) {
+    assert.throws(() => releaseApkName({ versionName, versionCode: 1020 }), /filename/);
+  }
+  const generic = { name: 'Stronghold-Protocol-release.apk', size: 100, browser_download_url: 'https://cnb.cool/old.apk' };
+  assert.throws(() => releaseAsset({ assets: [generic] }, 100, name), /missing/);
+  const current = { ...generic, name, browser_download_url: 'https://cnb.cool/new.apk' };
+  assert.equal(releaseAsset({ assets: [generic, current] }, 100, name), current.browser_download_url);
+});
+
+test('signed APK manifest must match source identity before publication, including package and min SDK', () => {
+  const expected = { applicationId: 'com.strongholdprotocol.client', versionName: '0.2.5', versionCode: 1020, minSdk: 24 };
+  const tree = `E: manifest
+    A: http://schemas.android.com/apk/res/android:versionCode(0x0101021b)=1020
+    A: http://schemas.android.com/apk/res/android:versionName(0x0101021c)="0.2.5" (Raw: "0.2.5")
+    A: package="com.strongholdprotocol.client" (Raw: "com.strongholdprotocol.client")
+      E: uses-sdk
+        A: http://schemas.android.com/apk/res/android:minSdkVersion(0x0101020c)=24
+        A: http://schemas.android.com/apk/res/android:targetSdkVersion(0x01010270)=37`;
+  assert.deepEqual(verifyApkIdentity(tree, expected), expected);
+  assert.deepEqual(verifyApkIdentity(tree.replace('=1020', '=0x3fc'), expected), expected);
+  for (const wrong of [tree.replace('="0.2.5"', '="0.2.4"'), tree.replace('=1020', '=1013'),
+    tree.replace('package="com.strongholdprotocol.client"', 'package="com.other.app"'),
+    tree.replace('=24', '=35'), '']) {
+    assert.throws(() => verifyApkIdentity(wrong, expected), /does not match/);
   }
 });
 

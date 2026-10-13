@@ -136,8 +136,10 @@ resume across process death. The first updater-enabled APK must be installed man
 CNB can build the Android project on Linux with Node, JDK 21, Android SDK platform
 37 and Build Tools 36 or newer. `node tools/build-android-client.mjs` now runs on
 Linux and Windows. Prepare all game assets/fonts before building; incomplete
-assets fail the build. The tag pipeline in `.cnb.yml` signs the APK, publishes a
-CNB Release, verifies anonymous downloads, then deploys the server with the
+assets fail the build. The tag pipeline in `.cnb.yml` signs the APK and verifies
+its compiled manifest against the release identity. It publishes a CNB Release
+with a versioned APK filename (`Stronghold-Protocol-v<VERSION>-<CODE>.apk`),
+verifies anonymous downloads, then deploys the server with the
 matching announcement. See [CNB release setup](../docs/CNB-RELEASE.md) for secrets,
 release tags and rollback behavior. Use the same announcement URL for future
 releases. Secrets must not be stored in `.cnb.yml`, the announcement, or the
