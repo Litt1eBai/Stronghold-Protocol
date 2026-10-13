@@ -37,6 +37,7 @@ master:
           - public/fonts:copy-on-write
       env:
         SP_SERVER_URL: http://203.135.99.28:30089
+        SP_MAVEN_CENTRAL_MIRROR: https://maven-central.storage-download.googleapis.com/maven2/
         SP_E2E: "0"
         SP_REAL_E2E: "0"
         RENDER_E2E: "0"

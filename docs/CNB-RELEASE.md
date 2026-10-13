@@ -2,6 +2,7 @@
 
 `.cnb.yml` 在 `master` 推送时运行代码检查，在 `android-v*` 标签推送时构建并发布 Android APK，随后部署服务端。
 Windows 构建不在此流水线范围内。云端首次运行仍需实际验证 CNB 的权限、资源下载和服务器网络连通性。
+发布构建通过 `SP_MAVEN_CENTRAL_MIRROR` 优先使用 [Google Cloud Storage 的 Maven Central 镜像](https://maven-central.storage.googleapis.com/index.html)，以避开共享云端出口的源站限流；本机构建默认仍使用原有仓库。
 普通代码检查没有下载素材时跳过素材文件验证，仍检查皮肤元数据；发布流水线先准备完整素材，再运行包含文件验证的检查。
 
 ## 首次配置
@@ -53,11 +54,11 @@ SSH 端口与游戏公网端口不同。流水线复用现有服务、Node.js �
 
 1. 修改 `client/android/app/build.gradle.kts` 的 `versionName` 和递增的 `versionCode`；每次原生发布都必须增加编号。
 2. 更新 `.cnb/release-notes.txt`，提交代码并同步到 CNB。
-3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.4-1016`，推送到 CNB：
+3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.4-1017`，推送到 CNB：
 
 ```bash
-git tag android-v0.2.4-1016
-git push cnb android-v0.2.4-1016
+git tag android-v0.2.4-1017
+git push cnb android-v0.2.4-1017
 ```
 
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
