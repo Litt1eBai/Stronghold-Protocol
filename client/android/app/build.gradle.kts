@@ -29,6 +29,10 @@ val prepareStaticAssets = tasks.register<Exec>("prepareStaticAssets") {
     inputs.dir(repo.resolve("public/fonts"))
     inputs.file(repo.resolve("data/assets.json"))
     inputs.file(repo.resolve("tools/prepare-android-assets.mjs"))
+    inputs.file(repo.resolve("server/http/assetViews.js"))
+    inputs.file(repo.resolve("server/http/assetIndex.js"))
+    inputs.file(repo.resolve("shared/assetPaths.js"))
+    inputs.files(repo.resolve("data/local-assets.json")).optional()
     outputs.dir(preinstalledAssets)
     commandLine("node", repo.resolve("tools/prepare-android-assets.mjs").absolutePath)
 }
@@ -42,8 +46,8 @@ android {
         minSdk = 24
         targetSdk = 37
         // Upgrade both the earlier Tauri APK (1003) and the WebView-only APK (1004).
-        versionCode = 1020
-        versionName = "0.2.5"
+        versionCode = 1021
+        versionName = "0.2.6"
         buildConfigField("String", "SERVER_URL", "\"$serverOrigin\"")
         buildConfigField("String", "ANDROID_UPDATE_URL", "\"$updateUrl\"")
         manifestPlaceholders["usesCleartextTraffic"] = (endpoint.scheme == "http").toString()

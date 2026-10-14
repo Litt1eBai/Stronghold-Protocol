@@ -161,7 +161,9 @@ from the APK, without an initial download or extraction. Images, animations and
 font files retain their original origin; audio supports byte ranges for seeking.
 Missing files use the normal server request. A query string such as `?v=2` also
 uses the server, so a deployment can bypass an older preinstalled resource.
-Replacing a preinstalled file at the same URL requires a new APK or a query string.
+Content-hashed URLs introduced in 0.2.6 use packaged files only when the hash
+matches their staged bytes or their Spine model. A changed hash uses the server.
+Replacing a file at a plain URL requires a new APK or a query string.
 Registration, login, WebSocket connections and game data continue using the server;
 preinstalled art does not make this an offline game.
 

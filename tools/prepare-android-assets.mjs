@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { rewriteManifest } from '../server/http/assetViews.js';
+import { hash16 } from '../server/http/assetIndex.js';
 
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
   gif: 'image/gif', svg: 'image/svg+xml', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
@@ -51,6 +53,27 @@ export async function stageAndroidAssets({ publicDir, manifestFile, outputDir })
       sha256: crypto.createHash('sha256').update(contents).digest('hex') });
     totalBytes += contents.length;
   }
+  // Match the server's file and shared Spine-model URL hashes using the staged bytes.
+  const byPath = new Map(inventory.map(file => [file.url.slice(1), file]));
+  const urlHashes = new Map(inventory.map(file => [file.url, new Set([file.sha256.slice(0, 16)])]));
+  const hashIndex = {
+    hashOf: rel => byPath.get(rel)?.sha256.slice(0, 16) ?? null,
+    modelHash: rels => {
+      const hashes = rels.map(rel => hashIndex.hashOf(rel));
+      return hashes.every(Boolean) ? hash16(hashes.join('\n')) : null;
+    },
+  };
+  const manifests = [['assets.json', manifest]];
+  try {
+    manifests.push(['local-assets.json', JSON.parse(await fs.readFile(path.join(path.dirname(manifestFile), 'local-assets.json'), 'utf8'))]);
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  for (const [name, doc] of manifests) {
+    for (const rels of rewriteManifest(doc, name, hashIndex).models) {
+      const hash = hashIndex.modelHash(rels);
+      if (hash) for (const rel of rels) urlHashes.get(`/${rel}`)?.add(hash);
+    }
+  }
+  for (const file of inventory) file.urlHashes = [...urlHashes.get(file.url)].sort();
   const index = { totalBytes, files: inventory };
   await fs.writeFile(path.join(outputDir, 'preinstalled', 'index.json'), JSON.stringify(index));
   return index;

@@ -61,6 +61,15 @@ test('account HTTP routes and authenticated hello retain upstream capabilities a
     const health = await (await fetch(srv.url + '/healthz')).json();
     assert.equal(health.app, APP_VERSION);
     assert.deepEqual(health.auth, { required: true, users: 1 });
+    const trafficHealth = await (await fetch(srv.url + '/healthz?traffic=1')).json();
+    assert.deepEqual(trafficHealth.auth, health.auth);
+    assert.ok(trafficHealth.traffic, 'traffic reporting and account authentication coexist');
+    assert.ok('assetHashes' in trafficHealth);
+    const forwardedHealth = await (await fetch(srv.url + '/healthz?traffic=1', {
+      headers: { 'X-Forwarded-For': '203.0.113.10' },
+    })).json();
+    assert.deepEqual(forwardedHealth.auth, health.auth);
+    assert.equal(forwardedHealth.traffic, undefined, 'public clients retain only the plain health report');
   } finally {
     for (const c of clients) await c.terminate();
     await srv.close();

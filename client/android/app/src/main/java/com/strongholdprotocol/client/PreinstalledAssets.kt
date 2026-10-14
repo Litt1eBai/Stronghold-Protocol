@@ -16,7 +16,9 @@ class PreinstalledAssets(private val assets: AssetManager) {
         val files = index.getJSONArray("files")
         val inventory = (0 until files.length()).associate { i ->
             val file = files.getJSONObject(i)
-            val asset = BundledAsset(file.getString("url"), file.getLong("size"), file.getString("mime"))
+            val hashes = file.optJSONArray("urlHashes")
+            val asset = BundledAsset(file.getString("url"), file.getLong("size"), file.getString("mime"),
+                if (hashes == null) emptySet() else (0 until hashes.length()).map { hashes.getString(it) }.toSet())
             asset.url to asset
         }
         policy = StaticAssetPolicy(BuildConfig.SERVER_URL, inventory)

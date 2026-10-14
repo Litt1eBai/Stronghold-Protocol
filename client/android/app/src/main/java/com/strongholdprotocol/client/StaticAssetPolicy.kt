@@ -2,7 +2,7 @@ package com.strongholdprotocol.client
 
 import java.net.URI
 
-data class BundledAsset(val url: String, val size: Long, val mime: String)
+data class BundledAsset(val url: String, val size: Long, val mime: String, val urlHashes: Set<String> = emptySet())
 data class AssetRange(val start: Long, val end: Long) {
     val length: Long get() = end - start + 1
 }
@@ -10,6 +10,7 @@ data class AssetRange(val start: Long, val end: Long) {
 /** Pure request policy, shared by the interceptor and JVM tests. */
 class StaticAssetPolicy(origin: String, private val inventory: Map<String, BundledAsset>) {
     private val server = URI(origin)
+    private val hashedPath = Regex("^(/assets/|/fonts/)~([0-9a-f]{16})/(.+)$")
     private fun port(uri: URI) = if (uri.port >= 0) uri.port else if (uri.scheme == "https") 443 else 80
 
     fun find(url: String, method: String): BundledAsset? {
@@ -21,6 +22,11 @@ class StaticAssetPolicy(origin: String, private val inventory: Map<String, Bundl
         if (uri.rawQuery != null || uri.rawFragment != null) return null
         val path = uri.path ?: return null
         if (!path.startsWith("/assets/") && !path.startsWith("/fonts/")) return null
+        val hashed = hashedPath.matchEntire(path)
+        if (hashed != null) {
+            val asset = inventory[hashed.groupValues[1] + hashed.groupValues[3]] ?: return null
+            return asset.takeIf { hashed.groupValues[2] in it.urlHashes }
+        }
         return inventory[path]
     }
 

@@ -35,6 +35,24 @@ class StaticAssetPolicyTest {
         assertNull(policy.range(10, null))
     }
 
+    @Test fun contentHashedUrlsUseOnlyMatchingPackagedBytesOrModels() {
+        val fileHash = "0123456789abcdef"
+        val modelHash = "fedcba9876543210"
+        val asset = BundledAsset("/assets/model/test.skel", 10, "application/octet-stream", setOf(fileHash, modelHash))
+        val font = BundledAsset("/fonts/test.woff2", 10, "font/woff2", setOf(fileHash))
+        val hashed = StaticAssetPolicy("http://game.example:30089", mapOf(asset.url to asset, font.url to font))
+        val origin = "http://game.example:30089"
+        assertEquals(asset, hashed.find("$origin/assets/~$fileHash/model/test.skel", "GET"))
+        assertEquals(asset, hashed.find("$origin/assets/~$modelHash/model/test.skel", "HEAD"))
+        assertEquals(font, hashed.find("$origin/fonts/~$fileHash/test.woff2", "GET"))
+        for (url in listOf("$origin/assets/~1111111111111111/model/test.skel",
+            "$origin/fonts/~$modelHash/test.woff2", "$origin/assets/~short/model/test.skel",
+            "$origin/assets/~$fileHash/model/test.skel?v=2", "$origin/assets/~$fileHash/model/missing.skel",
+            "http://other.example:30089/assets/~$fileHash/model/test.skel")) assertNull(hashed.find(url, "GET"))
+        assertNull(hashed.find("$origin/assets/~$fileHash/model/test.skel", "POST"))
+        assertNull(policy.find("$origin/assets/~$fileHash/audio/test.mp3", "GET"))
+    }
+
     @Test fun rangeStreamsStopAtTheirBoundaryAndPreserveMarkReset() {
         val input = LimitedAssetStream(ByteArrayInputStream(byteArrayOf(1, 2, 3, 4, 5)), 3)
         assertEquals(3, input.available())
