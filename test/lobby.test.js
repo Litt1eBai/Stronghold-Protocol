@@ -558,7 +558,10 @@ describe('websocket lobby', () => {
   });
 
   test('rate limit: bursts beyond 40 msg/s get RATE, connection survives, bucket refills', async () => {
-    const c = await pool.player('Spammer');
+    // Client deflate can pace these tiny frames enough to refill the bucket between them.
+    // Send the burst uncompressed; ws-compression.test.js covers negotiated compression separately.
+    const c = await pool.connect({ wsOptions: { perMessageDeflate: false } });
+    await c.hello('Spammer');
     const N = 100;
     const rids = [];
     for (let i = 0; i < N; i++) rids.push(c.send({ t: 'ping', c: i }));
@@ -576,7 +579,8 @@ describe('websocket lobby', () => {
   });
 
   test('flooding far beyond the limit closes the socket (1008)', async () => {
-    const c = await pool.player('Flood');
+    const c = await pool.connect({ wsOptions: { perMessageDeflate: false } });
+    await c.hello('Flood');
     // bursts until the server closes it: the close needs more than abuseDropsPerSec drops inside one 1 s window, and on
     // a heavily loaded machine a single burst of 600 can be read over more than a second — the old single burst then
     // never closed the socket and `await c.closed` (no timeout) hung the whole file
