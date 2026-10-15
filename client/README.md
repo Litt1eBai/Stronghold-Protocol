@@ -23,11 +23,11 @@ node tools/setup.mjs --yes
 npm.cmd --prefix client ci
 
 # Build and sign both clients for the fixed server:
-.\scripts\build-client-windows.ps1 -ServerUrl http://203.135.99.28:30089
+.\scripts\build-client-windows.ps1 -ServerUrl http://202.189.13.223:30089
 
 # Android only: Windows JDK 21 and Android SDK platform 37/build-tools 36 or newer.
 # Android needs complete local public/assets and public/fonts, but no Rust or NDK.
-.\scripts\build-client-windows.ps1 -Target Android -ServerUrl http://203.135.99.28:30089
+.\scripts\build-client-windows.ps1 -Target Android -ServerUrl http://202.189.13.223:30089
 ```
 
 Use `-Target Windows` for only the installer. Override `-AndroidSdk` and `-JavaHome`
@@ -38,7 +38,7 @@ Windows environment variables. Android Studio can open `client/android/`; set
 For an unsigned Android release, once static assets are prepared:
 
 ```powershell
-$env:SP_SERVER_URL = 'http://203.135.99.28:30089'
+$env:SP_SERVER_URL = 'http://202.189.13.223:30089'
 $env:ANDROID_HOME = 'E:\programs\dev\android_sdk'
 $env:JAVA_HOME = 'C:\programs\dev\java\zulu21'
 node tools/build-android-client.mjs

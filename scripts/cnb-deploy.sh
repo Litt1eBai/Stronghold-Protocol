@@ -12,6 +12,11 @@ printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$secret_dir/known_hosts"
 chmod 600 "$secret_dir"/*
 opts=(-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2
     -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$secret_dir/known_hosts" -i "$secret_dir/key")
+# A migrated host can retain its previously verified key at a new network address.
+if [[ -n "${DEPLOY_HOST_KEY_ALIAS:-}" ]]; then
+    [[ ! "$DEPLOY_HOST_KEY_ALIAS" =~ [[:space:]] ]] || exit 2
+    opts+=(-o "HostKeyAlias=$DEPLOY_HOST_KEY_ALIAS")
+fi
 target="$DEPLOY_USER@$DEPLOY_HOST"
 release_id=$(node -p "JSON.parse(require('fs').readFileSync('client/artifacts/server/RELEASE.json','utf8')).id")
 [[ "$release_id" =~ ^android-v[a-zA-Z0-9._-]+-[0-9a-f]{12}-[a-zA-Z0-9_-]+$ ]] || exit 2

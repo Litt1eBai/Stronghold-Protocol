@@ -435,10 +435,10 @@ Gradle 会在构建时检查 `public/assets` 是否存在且非空；没有完�
 npm.cmd ci
 node tools/setup.mjs --yes
 npm.cmd --prefix client ci
-.\scripts\build-client-windows.ps1 -ServerUrl http://203.135.99.28:30089
+.\scripts\build-client-windows.ps1 -ServerUrl http://202.189.13.223:30089
 
 # 只构建并签名安卓端：
-.\scripts\build-client-windows.ps1 -Target Android -ServerUrl http://203.135.99.28:30089
+.\scripts\build-client-windows.ps1 -Target Android -ServerUrl http://202.189.13.223:30089
 ```
 
 安卓需要 JDK 21、Android SDK Platform 37、Build Tools 36 或更高，以及完整的本地静态资产，无需 Rust/NDK 或初始化生成工程。Gradle 打包前校验素材清单，缺资源会终止构建。HTTP 地址使用 HTTP/WS，HTTPS 地址使用 HTTPS/WSS。服务器地址改变后需重新构建客户端。替换已预装的同名素材需要更新 APK，或在服务器资源 URL 添加版本查询参数以改走服务器。

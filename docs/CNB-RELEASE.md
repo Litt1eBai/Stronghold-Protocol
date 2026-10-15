@@ -28,6 +28,7 @@ allow_branches:
 
 使用原有 Android 签名证书，后续 APK 才能覆盖安装。SSH 密钥对应的公钥需要已加入服务器。
 `DEPLOY_KNOWN_HOSTS` 使用已核验的 SSH 主机公钥，流水线开启严格主机校验。
+迁移后的服务器保持原主机密钥；`DEPLOY_HOST_KEY_ALIAS=[203.135.99.28]:30080` 沿用密钥仓库中原地址的已核验记录，实际连接新地址。
 本机生成的私有配置位于 `.cache/cnb-release/android.yml` 和 `.cache/cnb-release/deploy.yml`，仅用于复制到密钥仓库。
 签名和部署变量分别只导入相应脚本步骤。
 
@@ -38,8 +39,8 @@ allow_branches:
 
 | 配置 | 值 |
 | --- | --- |
-| SSH | `root@203.135.99.28:30080`，本机别名 `shaoxing-tanggaoyun` |
-| 游戏入口 | `http://203.135.99.28:30089` |
+| SSH | `root@202.189.13.223:30080`，本机别名 `shaoxing-tanggaoyun` |
+| 游戏入口 | `http://202.189.13.223:30089` |
 | 服务器监听 | `127.0.0.1:3000/healthz` 用于本机检查 |
 | systemd 服务 | `stronghold-protocol.service` |
 | 当前版本 | `/opt/stronghold-protocol/current` 符号链接 |
@@ -55,24 +56,25 @@ SSH 连接和握手最多等待 15 秒；连接后定期检测服务端响应，
 
 1. 修改 `client/android/app/build.gradle.kts` 的 `versionName` 和递增的 `versionCode`；每次原生发布都必须增加编号。
 2. 在 `.cnb/release-notes.txt` 只填写本版本的用户可见变更；不要放发布标签、部署步骤或签名说明。提交代码并同步到 CNB。
-3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.6-1022`，推送到 CNB：
+3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.2.6-1023`，推送到 CNB：
 
 ```bash
-git tag android-v0.2.6-1022
-git push cnb android-v0.2.6-1022
+git tag android-v0.2.6-1023
+git push cnb android-v0.2.6-1023
 ```
 
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
 不要在旧源码上创建标签。流水线会拒绝与 Android 版本不匹配的标签。
 
 流水线先下载素材和皮肤，再验证代码和 golden，然后构建、签名并上传 APK。
-APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.2.6-1022.apk`，方便区分下载目录中的旧包。
+APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.2.6-1023.apk`，方便区分下载目录中的旧包。
 签名后从实际 APK 的 Manifest 核对包名、版本名、版本编号和最低 Android 版本；不一致时停止发布。
 `prepare-release-assets.mjs` 保留下载器的清单缩减保护和必需素材检查，并验证下载前后两份发布清单的全部文件引用。
 最新上游索引额外计划下载、但发布清单没有引用的资源，可以报告缺失；发布清单已引用的文件缺失、为空或为符号链接时必须失败。
-它从 CNB API 读取实际下载地址生成 `android.json`，打包服务端依赖，校验上传包 SHA-256 后切换 `current` 并重启服务。
+它从 CNB API 读取实际下载地址生成 `android.json`，打包服务端依赖；先上传公告与服务端包供恢复部署使用，再校验部署包 SHA-256、切换 `current` 并重启服务。
 服务端和 APK 同一发布所需的更新公告位于 `/updates/android.json`，随服务端一起切换。
 内部和公网健康检查必须与新包的应用版本、构建指纹一致，公网更新公告也必须一致。
+本次游戏入口 IP 变更，旧 APK 绑定旧地址，需要手动覆盖安装新 APK 一次；之后从新地址检查更新。
 全部成功后将 CNB Release 标记为 latest。首次支持更新的 APK 仍需手动安装；以后应用提示下载并交给系统确认安装。
 
 ## 部署失败和回退
