@@ -30,6 +30,9 @@ import { png, skel, atlas, writePlugin, cosmetic } from '../helpers/pluginFixtur
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const sha = (buf) => createHash('sha256').update(buf).digest('hex');
+// A same-size rewrite within one clock tick keeps its ctime on some file systems; the cache and the registry
+// distinguish a rewritten file by that ctime (server/http/files.js, server/plugins/registry.js), so let it tick.
+const ctimeTick = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 /** A checkout-shaped root: two operators' art in public/assets, the manifest naming them, and cosmetic plugins. */
 function exampleRoot() {
@@ -355,6 +358,7 @@ describe('the visual sets of a server', () => {
       let bytes = null;
       for (let c = 1; c < 255 && !bytes; c++) { const b = png(4, 4, [0, 0, c, 255]); if (b.length === scanned.bytes && sha(b) !== scanned.sha256) bytes = b; }
       assert.ok(bytes, 'a PNG of the same size');
+      await ctimeTick();
       fs.writeFileSync(file, bytes);
       fs.utimesSync(file, T, T);
       assert.deepEqual([fs.statSync(file).size, fs.statSync(file).mtimeMs], [scanned.bytes, scanned.mtimeMs], 'size and mtime as scanned');
@@ -377,7 +381,7 @@ describe('the visual sets of a server', () => {
     }
   });
 
-  test('a quiet rewrite (size and mtime put back) is noticed by the folders\' own check — no /p/ request needed', () => {
+  test('a quiet rewrite (size and mtime put back) is noticed by the folders\' own check — no /p/ request needed', async () => {
     const file = path.join(root, 'plugins', 'mine', 'm.png');
     const T = new Date(Math.floor(Date.now() / 1000) * 1000 - 90000);
     fs.utimesSync(file, T, T);
@@ -386,6 +390,7 @@ describe('the visual sets of a server', () => {
     let bytes = null;
     for (let c = 1; c < 255 && !bytes; c++) { const b = png(4, 4, [c, 9, 9, 255]); if (b.length === before.bytes && sha(b) !== before.sha256) bytes = b; }
     assert.ok(bytes, 'a PNG of the same size');
+    await ctimeTick();
     fs.writeFileSync(file, bytes);
     fs.utimesSync(file, T, T);
     // no rescan(), no request: the registry's look at its folders (here on every call: recheckMs 0) sees the new ctime
@@ -401,6 +406,7 @@ describe('the visual sets of a server', () => {
     fs.utimesSync(file, T, T);
     const cache = new CompressCache();
     assert.equal(zlib.gunzipSync(await cache.get(file, fs.statSync(file), 'gzip')).toString()[0], 'A');
+    await ctimeTick();
     fs.writeFileSync(file, 'B'.repeat(2000));
     fs.utimesSync(file, T, T);
     const st = fs.statSync(file);
