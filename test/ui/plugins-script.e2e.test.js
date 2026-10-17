@@ -18,9 +18,10 @@ test('two pages consent separately, refusal gates start, accepted script battles
  const P=(await import('puppeteer-core')).default;
  const host=new Client(P,srv.url,'host',{prefix:'plugins-script',w:1600,h:900}), guest=new Client(P,srv.url,'guest',{prefix:'plugins-script',w:1600,h:900});
  t.after(async()=>{await host.close();await guest.close();});
- await host.open();await host.enter('凯尔希');await host.click('.mode-card','同盟模拟');await host.click('.diff-card','标准模拟');await host.click('.create-box button','创建同盟');
+ await host.open();await host.enter('凯尔希');await host.click('.hub-entry','同盟模拟');await host.click('.ally-card--create');await host.click('.pcard','标准模拟');await host.click('.proto-start');
  const code=(await host.waitFor(s=>!!s.room?.code,'room created')).room.code;
- await guest.open();await guest.enter('阿米娅');await guest.click('.join-row input');await guest.page.keyboard.type(code);await guest.click('.join-row button','加入同盟');await guest.page.waitForSelector('.room-screen');
+ await guest.open();await guest.enter('阿米娅');await guest.click('.hub-tile', '密钥加入');
+      await guest.click('.join-row input');await guest.page.keyboard.type(code);await guest.click('.join-row button','加入同盟');await guest.page.waitForSelector('.room-screen');
  await host.page.evaluate(()=>globalThis.__SP__.net.request('room.setPlugins',{plugins:[{id:'training'},{id:'page-code'}]}));
  for(const c of [host,guest]){await c.page.waitForFunction(()=>document.querySelector('[role="dialog"]')?.textContent.includes('它可以完全控制你的游戏页面'));assert.match(await c.page.$eval('[role="dialog"]',e=>e.textContent),/training/);}
  await guest.click('.modal__actions button','拒绝');
@@ -31,7 +32,7 @@ test('two pages consent separately, refusal gates start, accepted script battles
  await Promise.all([guest.page.waitForNavigation({waitUntil:'domcontentloaded'}),guest.click('.modal__actions button','同意运行')]);
  for(const c of [host,guest])await c.page.waitForFunction(()=>globalThis.__TRUSTED_PAGE_LOADED__===true);
  for(const c of [host,guest])await c.page.waitForFunction(()=>globalThis.__SP__?.store?.get()?.room?.seats.filter(s=>s&&!s.isBot).every(s=>s.content==='ready'));
- await guest.click('.room-bar__right button','准备就绪');await host.click('.room-bar__right button','开始模拟');
+ await guest.click('.rs-foot__right button','准备就绪');await host.click('.rs-foot__right button','开始模拟');
  await host.waitFor(s=>s.phase==='COMBAT','battle',120000);
  const match=srv.lobby.getRoom(code).match;let accepted=false,last;
  for(const begin=Date.now();Date.now()-begin<90000;){last=await match.diag();if(last.verifyStats?.verified>0 || last.fields?.some(f=>f.done&&f.resultSource==='client')){accepted=true;break;}await sleep(100);}

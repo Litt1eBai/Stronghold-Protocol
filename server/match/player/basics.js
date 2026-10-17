@@ -9,7 +9,7 @@
 
 import { PHASE } from '../../../shared/constants.js';
 import { msg, dn } from '../../../shared/i18n.js';
-import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, resolveLoadout, charPotentialChanges } from '../../../shared/protocol.js';
+import { checkLoadout, checkLoadoutOps, skinChoiceCharId, cultivationCharIds, checkNotOwned, resolveLoadout, charPotentialChanges } from '../../../shared/protocol.js';
 import { cultivationOf } from '../../../shared/potential.js';
 import { tileKey, boardOrder } from '../board.js';
 
@@ -29,10 +29,10 @@ export class PlayerBasics {
     if (skins && typeof skins === 'object' && !Array.isArray(skins)) {
       for (const [id, skinId] of Object.entries(skins)) {
         if (typeof skinId !== 'string' || !skinId) continue;
-        const rec = this.gd.chess(id);
-        if (!rec || rec.isGolden || rec.visible === false || rec.isHidden || rec.isDiy || (rec.baseId && rec.baseId !== id)) continue;
-        const available = this.m?.opts.skinCatalogue?.[rec.charId];
-        if (available ? !available.includes(skinId) : !Object.hasOwn(this.gd.raw.assets?.chars?.[rec.charId]?.skins || {}, skinId)) continue;
+        const charId = skinChoiceCharId(id, this.gd.raw);
+        if (!charId) continue;
+        const available = this.m?.opts.skinCatalogue?.[charId];
+        if (available ? !available.includes(skinId) : !Object.hasOwn(this.gd.raw.assets?.chars?.[charId]?.skins || {}, skinId)) continue;
         out[id] = skinId;
       }
     }
@@ -41,10 +41,10 @@ export class PlayerBasics {
     return Object.keys(out).length > 0;
   }
 
-  /** The skin of the body on the board; stand-ins and DIY use their own models. */
+  /** The actual operator body: DIY choices follow the operator, and stand-ins keep their own models. */
   skinFor(rec) {
-    if (!rec || rec.isDiy || this.fieldsStandIn(rec)) return null;
-    return this.skins[rec.baseId || rec.chessId] || null;
+    if (!rec || this.fieldsStandIn(rec)) return null;
+    return this.skins[rec.isDiy ? rec.charId : rec.baseId || rec.chessId] || null;
   }
 
   get isHumanActive() { return !this.isBot && !this.left; }

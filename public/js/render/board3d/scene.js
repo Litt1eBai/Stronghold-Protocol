@@ -672,6 +672,12 @@ export class BoardScene {
     this.focusTarget = rect ? [rect.c0 - 0.5, rect.r0 - 0.5, rect.c1 + 0.5, rect.r1 + 0.5] : [-50, -50, 70, 70];
   }
 
+  /** Shared by existing and subsequently loaded scene materials; never applies to unit sprites or the DOM. */
+  setDisplay({ mapBrightness = 1, colorWarmth = 1 } = {}) {
+    this.focus.uMapBrightness.value = Number.isFinite(mapBrightness) ? Math.max(0.5, Math.min(2, mapBrightness)) : 1;
+    this.focus.uMapWarmth.value = Number.isFinite(colorWarmth) ? Math.max(0.6, Math.min(1.4, colorWarmth)) : 1;
+  }
+
   /** Settings quality change: 'low' drops the key light's shadow (antialias is fixed at context creation). */
   setQuality(q) {
     const on = q !== 'low';

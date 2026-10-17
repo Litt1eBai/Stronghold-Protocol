@@ -34,6 +34,7 @@
 
 // Polyfills first (older Safari / Firefox ESR): every module evaluated after this one sees them.
 import './ui/compat.js';
+import { mountRoomChat } from './ui/roomChat.js';
 import { render } from '../vendor/preact.module.js';
 import { useErrorBoundary } from '../vendor/hooks.module.js';
 import { html, UiHosts, Button, MicroLabel, closeAllDialogs } from './ui/components.js';
@@ -246,7 +247,15 @@ function wireNet() {
   net.on('replaced', () => toast(t('该身份已在其他页面登录，本页已断开'), 'warn', { ttl: 6000 }));
   net.on('unhandledError', (err) => toastError(err));
   net.on('room.state', onRoomState);
-  net.on('room.list', (msg) => store.set({ lobbyRooms: Array.isArray(msg.rooms) ? msg.rooms : [] }));
+  net.on('room.list', (msg) => {
+    const rooms = Array.isArray(msg.rooms) ? msg.rooms : [];
+    store.set({ lobbyRooms: rooms, lobbyStats: {
+      rooms,
+      online: Number.isSafeInteger(msg.online) && msg.online >= 0 ? msg.online : null,
+      roomsCount: Number.isSafeInteger(msg.roomsCount) ? msg.roomsCount : rooms.length,
+      matchesCount: Number.isSafeInteger(msg.matchesCount) ? msg.matchesCount : rooms.filter((r) => r.inMatch).length,
+    } });
+  });
   net.on('room.closed', (msg) => {
     backToLobby();
     const known = Object.hasOwn(CLOSE_REASON, String(msg.reason)) ? CLOSE_REASON[msg.reason] : null;
@@ -437,6 +446,7 @@ async function boot() {
   await Promise.all([waitForFonts(1200), connectWhenReady, langReady]);
   const root = document.getElementById('app');
   render(html`<${App} />`, root);
+  mountRoomChat();
 
   const splash = document.getElementById('boot');
   if (splash) {

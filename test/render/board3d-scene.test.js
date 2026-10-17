@@ -471,7 +471,9 @@ describe('shared board / scene water (#549, port of #555 onto #571)', () => {
     assert.match(w.fragmentShader, /#ifdef WATER_ENV\n\s+vec3 sky = textureLod\(uEnv, vec3\(rd.x, rd.y, -rd.z\), uEnvLod\).rgb \* uEnvScale;\n\s+#else/);
     assert.match(w.fragmentShader, /lit \+= ca \* uCausticsGain \* uCausticsTint \+ spec \* uSpecTint;\n\s+vec3 c = toLinear\(clamp\(lit, 0.0, 1.0\)\)/);
     assert.ok(!w.fragmentShader.includes('vec3(2.2)'), 'no early approximate gamma decode');
-    assert.match(w.fragmentShader, /c \* focusMask/);
+    assert.match(w.fragmentShader, /mapDisplay\(c\) \* focusMask/);
+    assert.equal(w.uniforms.uMapBrightness.value, 1, 'default display preserves the official water lighting');
+    assert.equal(w.uniforms.uMapWarmth.value, 1);
     assert.ok(w.fragmentShader.includes('#include <colorspace_fragment>'));
     const version = w.version;
     applyWaterMaterial(w, record());
@@ -511,6 +513,24 @@ describe('shared board / scene water (#549, port of #555 onto #571)', () => {
     }
     delete w.uniforms.uTiling;
     assert.doesNotThrow(() => applyWaterMaterial(w, record()), 'older partial water uniforms are safe');
+  });
+
+  test('display controls share uniforms across existing and newly loaded maps, and reset to the official default', () => {
+    const board = new BoardScene(THREE, fakePack(), { renderer: stubRenderer() });
+    try {
+      const material = sceneMaterial(THREE, {}, board.focus);
+      board.setDisplay({ mapBrightness: 1.6, colorWarmth: 1.2 });
+      assert.equal(material.uniforms.uMapBrightness.value, 1.6);
+      assert.equal(material.uniforms.uMapWarmth.value, 1.2);
+      const next = sceneMaterial(THREE, {}, board.focus);
+      assert.equal(next.uniforms.uMapBrightness.value, 1.6);
+      board.setDisplay({ mapBrightness: Infinity, colorWarmth: -100 });
+      assert.equal(material.uniforms.uMapBrightness.value, 1);
+      assert.equal(next.uniforms.uMapWarmth.value, 0.6);
+      board.setDisplay();
+      assert.equal(material.uniforms.uMapWarmth.value, 1);
+      material.dispose(); next.dispose();
+    } finally { board.destroy(); }
   });
 
   test('active stage owns the board parameters, cube and animation across preload, switch, replacement and removal', () => {

@@ -6,6 +6,8 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -22,6 +24,7 @@ import android.webkit.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONObject
@@ -46,6 +49,15 @@ class MainActivity : AppCompatActivity() {
     private var watchdog: Runnable? = null
     private var recoveryDialog: AlertDialog? = null
     private var documentScript: String = ""
+    private var fileSelection: ValueCallback<Array<Uri>>? = null
+    private val chooseFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val callback = fileSelection
+        fileSelection = null
+        // Only explicitly granted document-provider URIs may be handed back to the page.
+        val selected = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+            ?.filter { it.scheme == "content" }?.toTypedArray()?.takeIf { it.isNotEmpty() }
+        callback?.onReceiveValue(selected)
+    }
     private val preinstalledAssets by lazy { PreinstalledAssets(assets) }
     private val updater by lazy { AppUpdater(this) }
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
@@ -105,6 +117,17 @@ class MainActivity : AppCompatActivity() {
             WebViewCompat.addDocumentStartJavaScript(webView, documentScript, setOf(BuildConfig.SERVER_URL))
         }
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                cancelFileSelection()
+                fileSelection = callback
+                try {
+                    chooseFile.launch(params.createIntent())
+                } catch (_: ActivityNotFoundException) {
+                    cancelFileSelection()
+                    FileLogger.e("file-picker", "no system document picker available")
+                }
+                return true
+            }
             override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                 FileLogger.console(message.messageLevel().name, message.message(), "${message.sourceId()}:${message.lineNumber()}")
                 return true
@@ -118,6 +141,7 @@ class MainActivity : AppCompatActivity() {
                 return !isServerOrigin(request.url.toString())
             }
             override fun onPageStarted(view: WebView, url: String, icon: android.graphics.Bitmap?) {
+                cancelFileSelection()
                 if (!isServerOrigin(url)) {
                     view.stopLoading()
                     showFailure("页面跳转到了其他服务器，已停止加载")
@@ -149,6 +173,7 @@ class MainActivity : AppCompatActivity() {
             }
             @TargetApi(26)
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                cancelFileSelection()
                 // A terminated renderer's WebView cannot be reused. Recreate the view before retrying.
                 FileLogger.e("webview", "renderer gone, crashed=${detail.didCrash()}")
                 cancelWatchdog()
@@ -161,6 +186,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         applyDisplaySettings()
+    }
+
+    private fun cancelFileSelection() {
+        val callback = fileSelection
+        fileSelection = null
+        callback?.onReceiveValue(null)
     }
 
     private fun isServerOrigin(url: String): Boolean = try {
@@ -353,6 +384,7 @@ class MainActivity : AppCompatActivity() {
             }.setNegativeButton("取消", null).show()
     }
     override fun onDestroy() {
+        cancelFileSelection()
         updater.close()
         cancelWatchdog()
         recoveryDialog?.dismiss()

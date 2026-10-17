@@ -100,6 +100,8 @@ export class Session {
     this.accountId = null;
     /** @type {{id:string,username:string,displayName:string,role:string}|null} */
     this.account = null;
+    /** @type {string | null} operator portrait shown on the room's presentation card */
+    this.card = null;
     /** @type {import('ws').WebSocket | null} currently bound socket */
     this.ws = null;
     /** @type {boolean} */

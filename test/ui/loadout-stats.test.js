@@ -272,7 +272,9 @@ test('css: the section reuses the card\'s .dstats / .drange / .rgrid, sized for 
   const mine = rules.filter((r) => /\.lo-sec--stats|\.lo-stats__cap|\.lo-minfo--kit/.test(r.sel));
   assert.ok(mine.length >= 8, 'the stats rules exist');
   for (const r of mine) for (const m of r.body.matchAll(/font-size:\s*([^;]+);/g)) {
-    assert.match(m[1], /^max\([^)]*\d+px\)$/, `${r.sel}: font-size ${m[1]} keeps a px floor`);
+    // The readable size follows the text-size root --t (a calc() since the text-size setting), and the
+    // outer max() still carries the px floor: max(calc(.13 * var(--t)), 9px) or max(.13rem, 9px).
+    assert.match(m[1], /^max\(.+,\s*\d+px\)$/, `${r.sel}: font-size ${m[1]} keeps a px floor`);
   }
   const rule = (sel) => rules.find((r) => r.sel === sel)?.body || '';
   assert.match(rule('.lo-sec--stats .dstats-wrap'), /flex-wrap:\s*wrap/);

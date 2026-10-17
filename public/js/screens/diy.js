@@ -17,6 +17,8 @@ import { data } from '../data.js';
 import { PROF_NAME, skillLabel, moduleBadge, fullTraitText, skillTags } from '../ui/loadoutModel.js';
 import { diySlotList, pickChoices, pickOptions, slotRecord, defaultPick } from '../ui/diyModel.js';
 import { OperatorVoice } from '../ui/operatorVoice.js';
+import { SkinSection } from '../ui/skinPicker.js';
+import { skinsStore } from '../ui/skins.js';
 import { LoadoutStats } from '../ui/loadoutStats.js';
 import { CultivationSelects } from './cultivation.js';
 import { t } from '../../../shared/i18n.js';
@@ -63,7 +65,7 @@ function SlotCard({ m, slot, pick, illegal, onOpen, onClear, ops = {}, onOps = n
   const sk = rec.skill;
   const mod = elite?.module?.active ? elite.module : null;
   return html`<div class=${cx('diy-slot', `diy-slot--t${slot.tier}`, illegal && 'is-bad')} data-slot=${slot.slotId} data-char=${rec.charId}>
-    <div class="diy-slot__art"><${Img} src=${chessPortraitUrl(m, elite || rec)} fallback=${html`<b>${[...(rec.name || '?')][0]}</b>`} /></div>
+    <div class="diy-slot__art"><${Img} src=${chessPortraitUrl(m, elite || rec, { skin: skinsStore.get().entries[rec.charId] })} fallback=${html`<b>${[...(rec.name || '?')][0]}</b>`} /></div>
     <div class="diy-slot__body">
       <div class="diy-slot__head"><${TierChip} tier=${slot.tier} size="sm" /><span class="diy-slot__label">${label}</span><${KindTag} proto=${proto} /></div>
       <b class="diy-slot__name">${rec.name}</b>
@@ -224,6 +226,8 @@ export function DiyPickerView({ m, slot, picks, kitted, onDone, onClose, filter,
           ${!ch.proto && onOps ? html`<section class="lo-sec"><header class="lo-sec__head"><h3>${t('潜能与练度')}</h3></header><${CultivationSelects} charId=${draft.charId} ops=${ops} onSet=${onOps} /></section>` : null}
           <${LoadoutStats} base=${base} golden=${golden} entries=${previewEntries} level=${previewLevel}
             onLevel=${onPreviewLevel} getChess=${previewChess} ops=${ch.proto ? null : ops} />
+          <${OperatorVoice} charId=${draft.charId} />
+          <${SkinSection} chess=${{ chessId: draft.charId, charId: draft.charId }} />
           <h4 class="diy-pick__sec">${t('技能')}${ch.proto ? html`<small>${t('原型干员的技能与补位时一致，不可更改')}</small>` : null}</h4>
           <div role="radiogroup" aria-label=${t('选择技能')} class="diy-pick__choices">
             ${ch.skills.filter((s) => !ch.proto || s.index === skillOn).map((s) => html`<${SkillRow} key=${s.index} m=${m} s=${s} level=${previewLevel} on=${s.index === skillOn} locked=${ch.proto}

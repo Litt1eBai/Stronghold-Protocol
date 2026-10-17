@@ -157,7 +157,7 @@ export class BattlePlayers {
     if (!def) { this.log(`unknown chess ${inp.chessId}${lo.diy ? ' (illegal 自选 pick)' : ''}`); return null; }
     // a DIY slot has no body of its own (甄选干员): it fights only as a 自选 piece (its `diy` pick)
     if (def.raw?.isDiy && !def.diyFor) { this.log(`自选 slot ${inp.chessId} without a pick`); return null; }
-    const u = this._makeAlly(ps, def, 'op', r, c, { uid: inp.uid, dir, skin: inp.standIn || inp.diy ? null : inp.skin });
+    const u = this._makeAlly(ps, def, 'op', r, c, { uid: inp.uid, dir, skin: inp.standIn ? null : inp.skin });
     u.items = [...(inp.items ?? [])];
     u.carry = inp.carryState ?? null;
     // 练度 (自持有, 0.2.2): the owned operator's ×ATK / ×DEF / ×max HP (units.js Πmul) — never a 补位 stand-in's nor a

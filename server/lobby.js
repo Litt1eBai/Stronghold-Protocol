@@ -156,7 +156,7 @@
 
 import { randomBytes, randomInt } from 'node:crypto';
 import { DIFFICULTIES, ERR, MAX_SEATS, MAX_SPECTATORS, ROOM_CODE_LEN, modeIdFor } from '../shared/constants.js';
-import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, checkDiyPicks, charPotentialChanges } from '../shared/protocol.js';
+import { checkLoadout, checkLoadoutOps, skinChoiceCharId, cultivationCharIds, checkNotOwned, checkDiyPicks, charPotentialChanges } from '../shared/protocol.js';
 import { encode, isDroppable, isErrCode, sendRaw, sendSession } from './net.js';
 import { getData as defaultGetData, lookup } from './data.js';
 import { Match as DefaultMatch } from './match/Match.js';
@@ -195,7 +195,7 @@ const noopLog = { info() {}, warn() {}, error() {}, debug() {} };
 
 /**
  * @typedef {{ seat: number, playerId: string, name: string, isBot: boolean, ready: boolean,
- *             connected: boolean, left: boolean, loadout?: Record<string, { skill: number, module: string|null }> | null,
+ *             connected: boolean, left: boolean, card?: string | null, loadout?: Record<string, { skill: number, module: string|null }> | null,
  *             ops?: Readonly<Record<string, { potential: number, cultivate: number }>> | null,
  *             notOwned?: readonly string[] | null, diy?: Readonly<Record<string, DiyLoadout>> | null,
  *             content?: 'ready' | 'failed' | null, contentGen?: number, loadoutCs?: string | null, notOwnedCs?: string | null,
@@ -236,12 +236,11 @@ function freezeDiy(picks) {
   return Object.freeze(out);
 }
 
-function freezeSkins(skins, getChess, assets) {
+function freezeSkins(skins, data, assets) {
   const out = {};
   for (const [id, skinId] of Object.entries(skins || {})) {
-    const rec = getChess(id);
-    if (!rec || rec.isGolden || rec.visible === false || rec.isHidden || rec.isDiy || (rec.baseId && rec.baseId !== id)) continue;
-    if (!Object.hasOwn(assets?.chars?.[rec.charId]?.skins || {}, skinId)) continue;
+    const charId = skinChoiceCharId(id, data);
+    if (!charId || !Object.hasOwn(assets?.chars?.[charId]?.skins || {}, skinId)) continue;
     out[id] = String(skinId);
   }
   return Object.freeze(out);
@@ -285,6 +284,9 @@ export class Room {
     /** @type {string | null} per-network limit key of whoever started the running match */
     this.matchKey = null;
     this.createdAt = now;
+    // Ephemeral room communication; excluded from room.state, accounts and gameplay inputs.
+    this.chatMessages = [];
+    this.chatSequence = 0;
     this.disposed = false;
     /**
      * The content set the room plays (DESIGN §32): `{ cs, vanilla, plugins }` — the server's vanilla set, or with the
@@ -329,6 +331,7 @@ export class Room {
       inMatch: !!this.match,
       seats: this.seats.map((s) => (s
         ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left,
+          ...(s.card ? { card: s.card } : {}),
           // a room with gameplay plugins (header "Gameplay plugins"): has this player's page loaded and checked its content?
           ...(this.modded && !s.isBot ? { content: s.content || 'loading' } : {}) }
         : null)),
@@ -465,14 +468,71 @@ export class Lobby {
     return [...this.rooms.values()]
       .filter((r) => r.mode === 'coop' && !r.disposed)
       .map((r) => ({ code: r.code, mode: r.mode, difficulty: r.difficulty, inMatch: !!r.match,
-        players: r.seats.filter((s) => s && !s.left).length, seats: r.seats.filter((s) => s && !s.left).length, spectators: r.spectators.length,
+        players: r.seats.filter((s) => s && !s.left).length, seats: r.seats.filter((s) => s && !s.left).length,
+        humans: r.seats.filter((s) => s && !s.left && !s.isBot).length,
+        bots: r.seats.filter((s) => s && !s.left && s.isBot).length, spectators: r.spectators.length,
         maxSeats: MAX_SEATS, maxSpectators: MAX_SPECTATORS, createdAt: r.createdAt }))
       .sort((a, b) => a.inMatch - b.inMatch || a.createdAt - b.createdAt);
   }
 
   listPublic(session) {
-    sendSession(session, { t: 'room.list', rooms: this.publicRooms() });
+    const rooms = this.publicRooms();
+    const stats = this.stats();
+    const online = [...this.registry.byPlayerId.values()].filter((s) => s.connected).length;
+    sendSession(session, { t: 'room.list', rooms, online, roomsCount: stats.rooms, matchesCount: stats.matches });
     return { ok: true };
+  }
+
+  /** The room card is presentation only; never added to the match's gameplay inputs. */
+  setCard(session, msg) {
+    const room = this.roomOf(session);
+    const seat = room?.seatOf(session.playerId);
+    if (!room || !seat || seat.isBot || seat.left) return fail(ERR.NOT_IN_ROOM);
+    const charId = msg.charId;
+    if (charId && !Object.values(this.getData().chess || {}).some((chess) => chess.charId === charId)) {
+      return fail(ERR.BAD_MSG, 'unknown room portrait');
+    }
+    session.card = charId || null;
+    seat.card = session.card;
+    this.broadcastState(room);
+    return OK;
+  }
+
+  chatMember(session, code) {
+    const room = this.roomOf(session);
+    if (!room || room.mode !== 'coop' || room.code !== code) return null;
+    const seat = room.seatOf(session.playerId);
+    const member = seat && !seat.isBot && !seat.left ? seat : room.spectatorOf(session.playerId);
+    return member ? { room, member, seat: member === seat ? seat : null } : null;
+  }
+
+  chatHistory(session, { code }) {
+    const info = this.chatMember(session, code);
+    if (!info) return fail(ERR.NOT_IN_ROOM);
+    const now = this.now();
+    if (session.lastChatHistoryAt != null && now - session.lastChatHistoryAt < 1000) return fail(ERR.RATE);
+    session.lastChatHistoryAt = now;
+    sendSession(session, { t: 'room.chat.history', code, messages: info.room.chatMessages.slice(-80) });
+    return OK;
+  }
+
+  chat(session, { code, text: raw }) {
+    const info = this.chatMember(session, code);
+    if (!info) return fail(ERR.NOT_IN_ROOM);
+    // Plain text only, bounded both on the wire and in the in-memory history.
+    const text = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim().slice(0, 200);
+    if (!text) return fail(ERR.BAD_MSG);
+    const now = this.now();
+    if (session.lastChatAt != null && now - session.lastChatAt < 1000) return fail(ERR.RATE);
+    session.lastChatAt = now;
+    const { room, member, seat } = info;
+    const message = { t: 'room.chat', code, id: ++room.chatSequence,
+      playerId: session.playerId, name: member.name, seat: seat ? seat.seat : -1,
+      isSpectator: !seat, text, time: now };
+    room.chatMessages.push(message);
+    if (room.chatMessages.length > 80) room.chatMessages.shift();
+    this.broadcastRoom(room, message);
+    return OK;
   }
 
   /** Counters for /healthz. */
@@ -602,6 +662,9 @@ export class Lobby {
   handleMessage(session, msg, ctx = null) {
     switch (msg.t) {
       case 'room.list': return this.listPublic(session);
+      case 'room.card': return this.setCard(session, msg);
+      case 'room.chat': return this.chat(session, msg);
+      case 'room.chat.history': return this.chatHistory(session, msg);
       case 'room.create': return this.create(session, msg);
       case 'room.join': return this.join(session, msg);
       case 'room.leave': return this.leave(session);
@@ -1268,7 +1331,7 @@ export class Lobby {
   skins(session, { skins }) {
     const room = this.roomOf(session);
     const data = this.dataFor(room);
-    const cleaned = freezeSkins(skins, (id) => lookup('chess', id, data), this.safeData().assets);
+    const cleaned = freezeSkins(skins, data, this.safeData().assets);
     session.skins = cleaned;
     if (!room) return OK;
     const seat = room.seatOf(session.playerId);
@@ -1303,7 +1366,7 @@ export class Lobby {
         seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, connected: s.connected,
         // DESIGN §16: the human's checked operator loadout and (0.2.2) per-operator 潜能 / 练度 (bots fight with the defaults)
         loadout: own ? own.loadout : null,
-        skins: s.isBot ? null : freezeSkins(s.skins, (id) => lookup('chess', id, data), this.safeData().assets),
+        skins: s.isBot ? null : freezeSkins(s.skins, data, this.safeData().assets),
         ops: own ? own.ops : null,
         // 0.2.0 补位: the chess the human marked as not owned (bots own every operator)
         notOwned: own ? own.notOwned : null,
@@ -1623,6 +1686,7 @@ export class Lobby {
       seat: idx, playerId: session.playerId, name: session.name, isBot: false, ready: false, connected: session.connected, left: false,
       loadout: session.loadout || null,
       skins: session.skins || null,
+      card: session.card || null,
       ops: session.ops || null,
       notOwned: session.notOwned || null,
       diy: session.diy || null,

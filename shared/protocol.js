@@ -75,7 +75,7 @@ export function isBattleResult(v) {
 // ---- 干员皮肤 (docs/SKINS.md): room.skins { skins } -----------------------------------------------------------
 
 /**
- * `room.skins { skins }`: `skins` = `{ [baseChessId]: skinId }`.
+ * `room.skins { skins }`: `skins` = `{ [baseChessId | diyCharId]: skinId }`.
  * Unlike `room.loadout` these are PUBLIC: they ride in `Match.publicView().players[]` so a teammate sees your
  * skin, which is the whole point of choosing one in a co-op match.
  */
@@ -84,6 +84,14 @@ export const SKIN_LIMITS = Object.freeze({ entries: 160, idLen: 64 });
 export const isSkinId = (v) => typeof v === 'string' && v.length > 0 && v.length <= SKIN_LIMITS.idLen && /^[A-Za-z0-9_@#+.\-]+$/.test(v);
 /** Structural check of `room.skins.skins`. */
 export const isSkinSelection = (v) => isMap(v, SKIN_LIMITS.entries, isId, isSkinId);
+
+/** Resolve a cosmetic choice key to its actual operator; DIY choices never follow a reusable slot id. */
+export function skinChoiceCharId(id, data) {
+  if (Object.hasOwn(data?.backups?.units || {}, id)) return id;
+  const rec = data?.chess?.[id];
+  if (!rec || rec.isGolden || rec.visible === false || rec.isHidden || rec.isDiy || (rec.baseId && rec.baseId !== id)) return null;
+  return rec.charId || null;
+}
 
 // ---- operator loadout (DESIGN §16): room.loadout { entries } -------------------------------------------------
 
@@ -429,6 +437,9 @@ export const C2S = {
   ping: { c: (v) => typeof v === 'number' && Number.isFinite(v) },
   'room.create': { mode: (v) => v === 'solo' || v === 'coop', difficulty: (v) => DIFFICULTIES.includes(v) },
   'room.list': {},
+  'room.card': { charId: (v) => typeof v === 'string' && (v === '' || /^[A-Za-z0-9_-]{1,64}$/.test(v)) },
+  'room.chat': { code: (v) => isStr(v, ROOM_CODE_LEN) && v.length === ROOM_CODE_LEN, text: (v) => isStr(v, 200) && v.trim().length > 0 },
+  'room.chat.history': { code: (v) => isStr(v, ROOM_CODE_LEN) && v.length === ROOM_CODE_LEN },
   'room.join': { code: (v) => isStr(v, ROOM_CODE_LEN + 2) && /^[A-Za-z0-9]+$/.test(v) },
   'room.leave': {},
   'room.ready': { ready: isBool },
@@ -548,7 +559,7 @@ export const C2S = {
 // Server → client message types (documentation + client dispatch table keys).
 export const S2C = [
   'welcome', 'ok', 'error', 'pong',
-  'room.state', 'room.closed', 'room.list',
+  'room.state', 'room.closed', 'room.list', 'room.chat', 'room.chat.history',
   'm.public', 'm.private', 'm.field', 'm.toast', 'm.ticker', 'm.emote', 'm.result',
   // m.layer { playerId, bondId, add } — own live prep layer gain; ephemeral, never replayed on resync.
   'm.layer',

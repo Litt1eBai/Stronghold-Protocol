@@ -191,7 +191,7 @@ export async function createFieldView(host, options = {}) {
   signal?.throwIfAborted();
   const assets = resolveAssets(opts.assets);
   const data = makeData(opts.data);
-  const settings = { damageNumbers: true, officialDamageNumbers: false, ammoCount: false, mysticEnergy: false, quality: 'high', officialFx: 'auto', ...(opts.settings || {}) };
+  const settings = { damageNumbers: true, officialDamageNumbers: false, ammoCount: false, mysticEnergy: false, mapBrightness: 1, colorWarmth: 1, quality: 'high', officialFx: 'auto', ...(opts.settings || {}) };
   // the 3D board (three.js + the official art) loads in parallel with everything else
   const boardPref = boardPreference(opts.board);
   const want3d = boardPref !== '2d' && webgl2Available(boardPref === '3d');
@@ -457,6 +457,7 @@ export async function createFieldView(host, options = {}) {
         canvas: c3, antialias: settings.quality !== 'low' && (globalThis.devicePixelRatio || 1) < 2, shadows: settings.quality !== 'low',
       });
       const sz = size();
+      b.setDisplay(settings);
       b.resize(sz.width, sz.height, boardDpr());
       board3d = b;
       tiles.setExternal(true);
@@ -771,7 +772,7 @@ export async function createFieldView(host, options = {}) {
     return {
       kind: 'op', side: 'ally', defId: piece.id,
       spine: rec?.assets?.spine || rec?.charId || null, avatar: rec?.assets?.avatar || rec?.charId || null,
-      skin: si || dr ? null : piece.skin ?? null,
+      skin: si ? null : piece.skin ?? null,
       tier: chess?.tier || piece.tier || 1, golden: !!(piece.golden || chess?.isGolden), dir,
       ...(si ? { standInFor: si.standInFor } : null),
       ...(dr ? { diy: { charId: pick.charId, skillIndex: pick.skillIndex ?? null, uniEquipId: pick.uniEquipId ?? null } } : null),
@@ -2133,6 +2134,9 @@ export async function createFieldView(host, options = {}) {
       if (typeof s.officialDamageNumbers === 'boolean') settings.officialDamageNumbers = s.officialDamageNumbers;
       if (typeof s.ammoCount === 'boolean') settings.ammoCount = s.ammoCount;   // the units read it every frame (ctx.settings)
       if (typeof s.mysticEnergy === 'boolean') settings.mysticEnergy = s.mysticEnergy;   // likewise
+      if (Number.isFinite(s.mapBrightness)) settings.mapBrightness = Math.max(0.5, Math.min(2, s.mapBrightness));
+      if (Number.isFinite(s.colorWarmth)) settings.colorWarmth = Math.max(0.6, Math.min(1.4, s.colorWarmth));
+      board3d?.setDisplay(settings);
       if (s.quality === 'high' || s.quality === 'medium' || s.quality === 'low') settings.quality = s.quality;
       if (typeof s.officialFx === 'string' && s.officialFx !== settings.officialFx) { settings.officialFx = s.officialFx; syncOfficialFx(); }
       if (q !== settings.quality) { board3d?.setQuality?.(settings.quality); resize(); }

@@ -84,6 +84,7 @@ export const initialState = Object.freeze({
   session: { entered: false },
   room: null,
   lobbyRooms: [],
+  lobbyStats: null,
   match: emptyMatch(),
   ticker: [],
   emotes: [],

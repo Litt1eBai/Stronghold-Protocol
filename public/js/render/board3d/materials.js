@@ -21,6 +21,8 @@ export function focusUniforms(THREE) {
     uFocus: { value: new THREE.Vector4(0, 9, 10, 12) },  // x0, y0, x1, y1 (world)
     uFocusDim: { value: 0.72 },
     uFocusSoft: { value: 2.2 },
+    uMapBrightness: { value: 1 },
+    uMapWarmth: { value: 1 },
     // glossy "arena light" sheen: smooth surfaces (glass hatches, steel, plate centres; smoothness from TX_…_M) pick
     // up a bright reflection like the official baked reflections — added as sheen · smoothness²
     uSheen: { value: new THREE.Color(0.4, 0.45, 0.52) },
@@ -39,7 +41,7 @@ export function addFocus(material, uniforms) {
     shader.fragmentShader = shader.fragmentShader
       // tinted (dark) blocks glow less: emission follows the vertex tint
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#if defined( USE_COLOR )\n  { float ek = (vColor.r + vColor.g + vColor.b) / 3.0; totalEmissiveRadiance *= ek * ek; }\n#endif')
-      .replace('#include <common>', '#include <common>\nvarying vec3 vFocusWorld;\nuniform vec4 uFocus;\nuniform float uFocusDim;\nuniform float uFocusSoft;\nuniform vec3 uSheen;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFocusWorld;\nuniform vec4 uFocus;\nuniform float uFocusDim;\nuniform float uFocusSoft;\nuniform vec3 uSheen;\n' + MAP_DISPLAY_GLSL)
       .replace('#include <opaque_fragment>', [
         '#ifdef USE_ROUGHNESSMAP',
         '  { float sm = clamp(1.0 - texelRoughness.g, 0.0, 1.0); float tintk = 1.0;',
@@ -52,7 +54,7 @@ export function addFocus(material, uniforms) {
         '  vec2 fq = vFocusWorld.xy;',
         '  vec2 fd = max(vec2(0.0), max(uFocus.xy - fq, fq - uFocus.zw));',
         '  float fm = 1.0 - smoothstep(0.0, uFocusSoft, length(fd));',
-        '  outgoingLight *= mix(uFocusDim, 1.0, fm);',
+        '  outgoingLight = mapDisplay(outgoingLight) * mix(uFocusDim, 1.0, fm);',
         '}',
         '#include <opaque_fragment>',
       ].join('\n'));
@@ -218,7 +220,19 @@ const TERRAIN_VERT = [
   '}',
 ].join('\n');
 
+// Presentation controls are the identity at 100%; official lighting and battle data remain independent.
+const MAP_DISPLAY_GLSL = [
+  'uniform float uMapBrightness; uniform float uMapWarmth;',
+  'vec3 mapDisplay(vec3 c) {',
+  '  float w = uMapWarmth - 1.0;',
+  '  vec3 tint = w >= 0.0 ? vec3(1.0 + w * 0.45, 1.0 + w * 0.15, 1.0 - w * 0.35)',
+  '    : vec3(1.0 + w * 0.35, 1.0 - w * 0.08, 1.0 - w * 0.45);',
+  '  return c * tint * uMapBrightness;',
+  '}',
+].join('\n');
+
 const FOCUS_GLSL = [
+  MAP_DISPLAY_GLSL,
   'uniform vec4 uFocus; uniform float uFocusDim; uniform float uFocusSoft;',
   'float focusMask(vec2 q) { vec2 d = max(vec2(0.0), max(uFocus.xy - q, q - uFocus.zw)); return mix(uFocusDim, 1.0, 1.0 - smoothstep(0.0, uFocusSoft, length(d))); }',
 ].join('\n');
@@ -508,7 +522,7 @@ export function sceneMaterial(THREE, o, focus) {
       '    vec3 lit = a.rgb * (light + uLightColor * max(dot(n, uLightDir), 0.0) * shade);',
       '  #endif',
       '  vec3 c = toLinear(clamp(lit, 0.0, 1.0));',
-      '  gl_FragColor = vec4(c * focusMask(vWorld.xy), a.a);',
+      '  gl_FragColor = vec4(mapDisplay(c) * focusMask(vWorld.xy), a.a);',
       '  #include <colorspace_fragment>',
       '}',
     ].join('\n'),
@@ -554,7 +568,7 @@ export function trapMaterial(THREE, map, focus, info = null, lightDir = [0.36, 0
       '  vec3 a = toDisplay(texture2D(uMap, vUv).rgb);',
       '  vec3 n = normalize(gl_FrontFacing ? vN : -vN);',
       '  vec3 lit = a * (uAmbient + uDiffuse * max(dot(n, uLightDir), 0.0));',
-      '  gl_FragColor = vec4(toLinear(clamp(lit, 0.0, 1.0)) * focusMask(vWorld.xy), 1.0);',
+      '  gl_FragColor = vec4(mapDisplay(toLinear(clamp(lit, 0.0, 1.0))) * focusMask(vWorld.xy), 1.0);',
       '  #include <colorspace_fragment>',
       '}',
     ].join('\n'),
@@ -696,7 +710,7 @@ export function waterMaterial(THREE, tex, focus, info = null, reflection = {}) {
       '  vec3 lit = mix(w.rgb * uColorIntensity, sky, clamp(uSkyStrength, 0.0, 1.0));',
       '  lit += ca * uCausticsGain * uCausticsTint + spec * uSpecTint;',
       '  vec3 c = toLinear(clamp(lit, 0.0, 1.0));',
-      '  gl_FragColor = vec4(c * focusMask(vWorld.xy), clamp(w.a + uAlphaLift, 0.0, 1.0));',
+      '  gl_FragColor = vec4(mapDisplay(c) * focusMask(vWorld.xy), clamp(w.a + uAlphaLift, 0.0, 1.0));',
       '  #include <colorspace_fragment>',
       '}',
     ].join('\n'),
@@ -756,7 +770,7 @@ export function sceneWaterDecalMaterial(THREE, tex, focus, info) {
       '  #endif',
       '  vec4 w = mix(uDeep, uShallow, 0.08 + 0.2 * diff);',
       '  vec3 c = pow(w.rgb, vec3(2.2)) + ca * vec3(0.03, 0.05, 0.05) + spec * vec3(0.5, 0.6, 0.65);',
-      '  gl_FragColor = vec4(c * focusMask(vWorld.xy), clamp(w.a + 0.2, 0.0, 1.0));',
+      '  gl_FragColor = vec4(mapDisplay(c) * focusMask(vWorld.xy), clamp(w.a + 0.2, 0.0, 1.0));',
       '  #include <colorspace_fragment>',
       '}',
     ].join('\n'),

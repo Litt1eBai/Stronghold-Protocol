@@ -33,11 +33,14 @@ export function chessAvatarUrl(m, chess, opts) {
  * Half-body portrait (180×360) for a chess record (golden → E2 portrait when present).
  * @param {any} m
  * @param {any} chess
+ * @param {{ skin?: string }} [opts] Installed skin art takes precedence, with its avatar as a fallback.
  */
-export function chessPortraitUrl(m, chess) {
+export function chessPortraitUrl(m, chess, opts) {
   const chars = obj(obj(m)?.chars);
   const id = str(chess?.assets?.portrait);
   if (!chars) return null;
+  const skinArt = chars[chess?.charId]?.skins?.[opts?.skin || chess?.skin];
+  if (skinArt) return str(skinArt.portrait) || str(skinArt.avatar);
   if (id) {
     if (id.endsWith('_2')) {
       const base = chars[id.slice(0, -2)];

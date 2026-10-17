@@ -81,6 +81,38 @@ test('skin selection reaches public/prep views, promoted chess, battle specs and
   } finally { h.m.dispose(); }
 });
 
+test('DIY skins follow the chosen operator through prep and combat, and never migrate to a different body', () => {
+  const charId = 'char_112_siege', skin = 'char_112_siege@winter#1';
+  const slot = 'chess_char_5_diy1_a';
+  const data = { ...DATA, assets: { ...DATA.assets, chars: { ...DATA.assets.chars,
+    [charId]: { skins: { [skin]: { avatar: '/test.png' } } },
+  } } };
+  const h = makeMatch({ data, seats: [{ seat: 0, playerId: 'p_0', connected: true, isBot: false,
+    skins: { [charId]: skin, [slot]: skin, char_unknown: skin },
+    diy: { [slot]: { charId, skillIndex: 2, uniEquipId: 'uniequip_002_siege' } },
+  }] });
+  try {
+    const ps = h.m.players.get('p_0');
+    assert.deepEqual(ps.skins, { [charId]: skin });
+    const piece = ps.newPiece('chess', slot);
+    ps.board.set('9,3', piece);
+    assert.equal(ps.pieceView(piece).skin, skin);
+    const input = ps.battleInput();
+    assert.equal(input.units[0].diy.charId, charId);
+    assert.equal(input.units[0].skin, skin);
+    const spec = buildBattleSpec({ battleId: 'diy-skin', seed: 1, stageId: 'act2autochess_m01',
+      fieldKind: 'normal', players: [input], waves: [] }, { data });
+    const battle = createBattleFromSpec(spec, data);
+    const unit = battle.units.find(u => u.uid === piece.uid);
+    assert.equal(unit.def.raw.charId, charId);
+    assert.equal(unit.skin, skin);
+    assert.equal(renderInfo(unitInfo(unit)).skin, skin);
+    assert.equal(ps.skinFor({ isDiy: true, charId: 'char_172_svrash', chessId: slot }), null);
+    ps.setSkins({ [charId]: 'unknown' });
+    assert.equal(ps.pieceView(piece).skin, undefined);
+  } finally { h.m.dispose(); }
+});
+
 test('skin protocol limits reject malformed or oversized maps', () => {
   assert.equal(validateC2S({ t: 'room.skins', skins: { [ID]: SKIN } }), null);
   assert.ok(validateC2S({ t: 'room.skins', skins: { [ID]: 'a/b' } }));

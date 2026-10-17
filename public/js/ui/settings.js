@@ -1,3 +1,4 @@
+import { getRoomDanmaku } from './roomDanmaku.js';
 // Player settings (BGM/SFX/voice volume, the voice dub 语音语言, mute, damage numbers, the optional 弹药数量 under an ammo
 // skill's bar — not in the official HUD, off by default, PR #552 —, the optional 作战统计 panel — off by default,
 // PR #618 —, render quality, 文字大小, the
@@ -371,6 +372,8 @@ function UiPluginSection() {
  */
 export function SettingsModal({ open, onClose }) {
   const s = useSettings();
+  const [danmakuOn, setDanmakuOn] = useState(() => getRoomDanmaku().enabled);
+  useEffect(() => getRoomDanmaku().subscribe(() => setDanmakuOn(getRoomDanmaku().enabled)), []);
   const [tested, setTested] = useState(false);
   const [touchUi] = useState(() => Boolean(globalThis.AndroidNative) || (detectFeatures().coarse && !detectFeatures().fine));
   const mtNote = machineTranslationNote(); // a pack marked as machine translation says so under the switch
@@ -416,6 +419,7 @@ export function SettingsModal({ open, onClose }) {
       <p class="set-hint">${t('弹药类技能开启时，在弹药条下方显示剩余弹药 / 总弹药数（如 13/14）。官方界面没有这个数字。')}</p>
       <${Toggle} label=${t('秘术师能量')} micro="STORED ENERGY" value=${s.mysticEnergy} onChange=${(v) => updateSettings({ mysticEnergy: v })} />
       <p class="set-hint">${t('在秘术师的血条下方显示储存的攻击能量 / 上限（如 2/3）。官方用干员身上的特效表示，没有这个数字。')}</p>
+      <${Toggle} label=${t('局内弹幕')} micro="DANMAKU" value=${danmakuOn} onChange=${(v) => getRoomDanmaku().setEnabled(v)} />
       <${Toggle} label=${t('作战统计')} micro="COMBAT STATS" value=${s.combatMetrics} onChange=${(v) => updateSettings({ combatMetrics: v })} />
       <p class="set-hint">${t('打开后，对局左下角可以查看自己干员的伤害、治疗和 DPS / HPS。官方界面没有这个窗口。改变玩法的插件对局在 Worker 里演算，统计不到，按钮不显示。')}</p>
       <div class="set-row">
@@ -425,6 +429,21 @@ export function SettingsModal({ open, onClose }) {
             class=${s.quality === id ? 'is-on' : ''} onClick=${() => updateSettings({ quality: id })}>${t(label)}</button>`)}
         </div>
       </div>
+      <label class="set-row">
+        <span class="set-row__label">${t('地图亮度')}<${MicroLabel}>MAP BRIGHTNESS<//></span>
+        <input class="set-range" type="range" min="50" max="200" step="5" value=${Math.round(s.mapBrightness * 100)}
+          data-testid="map-brightness" style=${`--pct:${(s.mapBrightness * 100 - 50) / 1.5}%`}
+          onInput=${(e) => updateSettings({ mapBrightness: Number(e.currentTarget.value) / 100 })} />
+        <span class="set-row__val num">${Math.round(s.mapBrightness * 100)}%</span>
+      </label>
+      <label class="set-row">
+        <span class="set-row__label">${t('冷热度调整')}<${MicroLabel}>COLOR TEMPERATURE<//></span>
+        <input class="set-range" type="range" min="60" max="140" step="5" value=${Math.round(s.colorWarmth * 100)}
+          data-testid="map-warmth" style=${`--pct:${(s.colorWarmth * 100 - 60) / 0.8}%`}
+          onInput=${(e) => updateSettings({ colorWarmth: Number(e.currentTarget.value) / 100 })} />
+        <span class="set-row__val num">${Math.round(s.colorWarmth * 100)}%</span>
+      </label>
+      <p class="set-hint">${t('只调整 3D 地图的显示，不改变干员、界面或对局规则。100% 为默认效果。')}</p>
       ${fxOk ? html`<div class="set-row" data-testid="official-fx">
         <span class="set-row__label">${t('官方特效')}<${MicroLabel}>OFFICIAL FX<//></span>
         <div class="set-seg" role="radiogroup" aria-label=${t('官方特效')}>

@@ -24,6 +24,9 @@ test('skin picker on desktop and touch phone: persist/export/reset, room sync an
       await page.goto(`http://127.0.0.1:${srv.port}/`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => globalThis.__SP__?.store.get().connection.status === 'online');
       await page.click('[data-testid="loadout-open"]');
+      await page.waitForSelector('.lo-op', { visible: true });
+      await page.click('[title="筛选干员 · 切换列表视图"]');
+      await page.click('.lo-pop--filter .lo-seg button:last-child');
       await page.waitForSelector('.lo-card', { visible: true });
       await page.type('.lo-search input', '隐现');
       await page.waitForFunction(() => document.querySelectorAll('.lo-card').length === 1);
