@@ -7,6 +7,10 @@ import { buildBattleSpec, createBattleFromSpec } from '../server/sim/spec.js';
 import { validateC2S } from '../shared/protocol.js';
 import { skinsStore, setSkins, installSkinsSync } from '../public/js/ui/skins.js';
 import { loadoutStore } from '../public/js/ui/loadoutSync.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { writePlugin } from './helpers/pluginFixtures.js';
 
 const ID = 'chess_char_1_01_a';
 const SKIN = 'char_498_inside@kitchen#2';
@@ -125,4 +129,47 @@ test('room.skins validates selection, survives session resume, and follows the p
     const cleared = await resumed.waitFor('m.public', p => !p.players.find(x => x.playerId === w.playerId)?.skins);
     assert.equal(cleared.players.find(p => p.playerId === w.playerId).skins, undefined);
   } finally { for (const c of clients) await c.terminate(); await srv.close(); }
+});
+
+test('skins survive gameplay content isolation and change through the real match child; persistent plugin directory is honored', { timeout: 40_000 }, async () => {
+  const { startServer } = await import('../server/index.js');
+  const { TestClient } = await import('./helpers/wsClient.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-skin-plugin-'));
+  writePlugin(path.join(dir, 'skin-room'), { manifest: 2, version: '1.0.0', app: '*', api: 1,
+    class: 'content', scope: ['room'], permissions: ['data.patch'], data: ['patch.json'] },
+  { 'patch.json': { patch: 1, ops: [] } });
+  const original = process.env.SP_PLUGINS_DIR;
+  let srv, client;
+  try {
+    try {
+      process.env.SP_PLUGINS_DIR = dir;
+      srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, assetIndex: false });
+    } finally {
+      if (original === undefined) delete process.env.SP_PLUGINS_DIR;
+      else process.env.SP_PLUGINS_DIR = original;
+    }
+    client = await TestClient.connect(`ws://127.0.0.1:${srv.port}/ws`);
+    const welcome = await client.hello('skin-child');
+    const ok = async (msg) => assert.equal((await client.request(msg, 20_000)).t, 'ok');
+    await ok({ t: 'room.skins', skins: { [ID]: SKIN } });
+    await ok({ t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
+    await ok({ t: 'room.setPlugins', plugins: [{ id: 'skin-room' }] });
+    const room = await client.waitFor('room.state', r => r.content?.vanilla === false, 20_000);
+    await ok({ t: 'room.contentReady', cs: room.content.cs });
+    await ok({ t: 'room.start' });
+    const pub = await client.waitFor('m.public', m => m.players.some(p => p.playerId === welcome.playerId), 20_000);
+    assert.deepEqual(pub.players.find(p => p.playerId === welcome.playerId).skins, { [ID]: SKIN });
+    assert.equal(srv.lobby.getRoom(room.code).match.hosted, true);
+    await ok({ t: 'room.skins', skins: {} });
+    await client.waitFor('m.public', m => !m.players.find(p => p.playerId === welcome.playerId)?.skins, 20_000);
+    await ok({ t: 'room.skins', skins: { [ID]: SKIN, [CH.goldenId]: SKIN } });
+    const changed = await client.waitFor('m.public', m => !!m.players.find(p => p.playerId === welcome.playerId)?.skins, 20_000);
+    assert.deepEqual(changed.players.find(p => p.playerId === welcome.playerId).skins, { [ID]: SKIN });
+    await ok({ t: 'room.skins', skins: { [ID]: 'not-installed' } });
+    await client.waitFor('m.public', m => !m.players.find(p => p.playerId === welcome.playerId)?.skins, 20_000);
+  } finally {
+    await client?.terminate();
+    await srv?.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

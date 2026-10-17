@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 const chrome = process.env.CHROME_PATH;
 const enabled = process.env.SP_E2E === '1' && chrome && existsSync(chrome);
@@ -34,7 +34,8 @@ test('settings are available after login, including Android adaptation of older 
         };
       });
       await page.goto(`http://127.0.0.1:${srv.port}/`, { waitUntil: 'domcontentloaded' });
-      if (android) await page.addScriptTag({ path: path.resolve('client/android/app/src/main/assets/shell.js') });
+      // Match WebView.evaluateJavascript: a native injection, not an inline script blocked by the site's CSP.
+      if (android) await page.evaluate(readFileSync(path.resolve('client/android/app/src/main/assets/shell.js'), 'utf8'));
       await page.waitForSelector('.title-screen', { visible: true });
       assert.equal(await page.$('.title-settings, .lobby-settings, .room-settings, .sp-shell-settings'), null);
       await page.type('.title-login input', 'settings-test');

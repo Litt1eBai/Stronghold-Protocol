@@ -1,24 +1,55 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, access, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, access, symlink, cp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { stageServer, normalizeReleaseTimes } from '../tools/server-release.mjs';
+import { stageServer, normalizeReleaseTimes, SERVER_PLUGIN_RESOURCES } from '../tools/server-release.mjs';
 import { computeBuildTag } from '../server/http/buildTag.js';
+import { templateFile } from '../server/studio/gameData.js';
+import { importProblems } from '../tools/package.mjs';
 
 test('runtime staging excludes credentials, accounts and stale update announcements; fingerprint survives tar', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'sp-server-stage-'));
   try {
     const source = path.join(dir, 'source'), stage = path.join(dir, 'stage'), extracted = path.join(dir, 'extracted');
     for (const folder of ['server', 'shared', 'data', 'public/updates', 'tools', '.cache']) await mkdir(path.join(source, folder), { recursive: true });
+    for (const folder of ['server', 'shared']) await cp(path.resolve(folder), path.join(source, folder), { recursive: true });
     for (const file of ['package.json', 'package-lock.json', 'LICENSE', 'NOTICE.md', 'tools/vendor.mjs',
       'server/index.js', 'shared/constants.js', 'data/chess.json', 'public/index.html', 'public/updates/android.json', '.cache/accounts.json', '.env']) {
       await writeFile(path.join(source, file), '{}');
     }
+    for (const resource of SERVER_PLUGIN_RESOURCES) {
+      await cp(path.resolve(resource), path.join(source, resource), { recursive: true });
+    }
+    await mkdir(path.join(source, 'plugins/owner-plugin'), { recursive: true });
+    await writeFile(path.join(source, 'plugins/owner-plugin/plugin.json'), '{}');
+    await writeFile(path.join(source, 'plugins/.studio-key'), 'local-only');
+    await writeFile(path.join(source, 'plugins/config.json'), '{}');
     await stageServer(source, stage);
-    for (const file of ['.cache/accounts.json', '.env', 'public/updates/android.json']) await assert.rejects(access(path.join(stage, file)));
+    const stagedFiles = [];
+    async function walk(directory, prefix = '') {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const rel = prefix + entry.name;
+        if (entry.isDirectory()) await walk(path.join(directory, entry.name), rel + '/');
+        else stagedFiles.push(rel);
+      }
+    }
+    await walk(stage);
+    assert.deepEqual(importProblems(path.resolve('.'), stagedFiles), [], 'every shipped runtime import resolves inside the release');
+    for (const file of ['.cache/accounts.json', '.env', 'public/updates/android.json',
+      'plugins/owner-plugin', 'plugins/.studio-key', 'plugins/config.json']) await assert.rejects(access(path.join(stage, file)));
+    const resources = process.env.SP_PLUGIN_RESOURCES;
+    try {
+      process.env.SP_PLUGIN_RESOURCES = path.join(stage, 'plugins');
+      assert.match(templateFile('ui', 'ui/index.html'), /<html/);
+      assert.ok(JSON.parse(templateFile('script', 'guard.json')));
+      assert.ok(JSON.parse(await readFile(path.join(stage, 'schemas/plugin.schema.json'), 'utf8')));
+    } finally {
+      if (resources === undefined) delete process.env.SP_PLUGIN_RESOURCES;
+      else process.env.SP_PLUGIN_RESOURCES = resources;
+    }
     assert.equal(await readFile(path.join(stage, 'server/index.js'), 'utf8'), '{}');
     await normalizeReleaseTimes(stage, 1700000000);
     await mkdir(extracted);

@@ -63,6 +63,8 @@ async function driveLoop(c, { skipOnce = false, until, stats }) {
   const deadlineAt = Date.now() + 90_000;
   while (!abort && !until() && Date.now() < deadlineAt) {
     await delay(20);
+    // The goal can arrive during the yield. Do not ready round 4 and start another battle before stopping.
+    if (abort || until()) break;
     const pub = latest(c, 'm.public');
     const priv = latest(c, 'm.private');
     if (!pub) continue;

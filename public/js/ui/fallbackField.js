@@ -21,7 +21,6 @@
 
 import { render } from '../../vendor/preact.module.js';
 import { html, TierChip } from './components.js';
-import { avatarUrl } from '../assets.js';
 import { GEO } from '../../../shared/constants.js';
 import { chessAvatarUrl, itemIconUrl, tokenAvatarUrl, enemyIconUrl } from './assetUrls.js';
 import { tileKey, hasFlag, UF, penPlacement, PEN, fieldTile, ownStandIn, ownDiyRecord } from './gameLogic.js';
@@ -38,7 +37,7 @@ function unitArt(m, info) {
   if (info.side === 'enemy' || String(id).startsWith('enemy_')) return enemyIconUrl(m, id);
   if (String(id).startsWith('token_')) return tokenAvatarUrl(m, id);
   if (info.skin) {
-    const skinArt = avatarUrl(m, id, { skin: info.skin });
+    const skinArt = chessAvatarUrl(m, { charId: String(id).replace(/_2$/, ''), assets: { avatar: id } }, { skin: info.skin });
     if (skinArt) return skinArt;
   }
   const chars = m.chars || {};
@@ -524,6 +523,15 @@ export function createFallbackView(host, opts = {}) {
       return () => listeners.get(type)?.delete(fn);
     },
     off(type, fn) { listeners.get(type)?.delete(fn); },
+    /** Resolve the live DOM target, never a remembered hover or selected piece. */
+    pieceAtClientPoint(clientX, clientY) {
+      if (st.destroyed || st.mode !== 'prep' || st.camera === 'pen' || st.drag
+        || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+      const el = document.elementFromPoint(clientX, clientY)?.closest('.ff-piece[data-uid]');
+      if (!el || !root.contains(el)) return null;
+      const uid = Number(el.dataset.uid);
+      return Number.isInteger(uid) ? uid : null;
+    },
     pieceScreenRect(uid) {
       const el = root.querySelector(`[data-uid="${Number(uid)}"]`);
       return el ? el.getBoundingClientRect() : null;

@@ -9,10 +9,16 @@ import { computeBuildTag } from '../server/http/buildTag.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/** Repository-owned author resources only; installed plugins and studio keys never ship. */
+export const SERVER_PLUGIN_RESOURCES = ['schemas', 'plugins/_template', 'plugins/README.md', 'plugins/AGENTS.md',
+  'docs/PLUGINS.md', 'docs/PLUGIN-GUIDE.md', 'docs/PLUGIN-DSL.md', 'docs/PLUGIN-API.md',
+  'docs/plugin-catalog.example.json', 'tools/plugin.mjs', 'tools/assets', 'test/helpers/battleHarness.js'];
+
 /** Explicit runtime allowlist: no account databases, signing keys or development caches. */
 export async function stageServer(root, stage) {
   await mkdir(stage, { recursive: true });
-  const entries = ['server', 'shared', 'data', 'public', 'package.json', 'package-lock.json', 'LICENSE', 'NOTICE.md'];
+  const entries = ['server', 'shared', 'data', 'public', 'package.json', 'package-lock.json', 'LICENSE', 'NOTICE.md',
+    'tools/vendor.mjs', ...SERVER_PLUGIN_RESOURCES];
   try { await access(path.join(root, 'packs')); entries.push('packs'); } catch { /* optional content packs */ }
   for (const entry of entries) {
     await cp(path.join(root, entry), path.join(stage, entry), { recursive: true, filter: async (file) => {
@@ -22,8 +28,6 @@ export async function stageServer(root, stage) {
       return true;
     } });
   }
-  await mkdir(path.join(stage, 'tools'), { recursive: true });
-  await cp(path.join(root, 'tools/vendor.mjs'), path.join(stage, 'tools/vendor.mjs'));
 }
 
 /** buildTag uses mtimes; GNU tar stores seconds, so normalize before fingerprinting. */

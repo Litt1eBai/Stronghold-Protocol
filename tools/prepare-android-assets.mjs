@@ -64,9 +64,11 @@ export async function stageAndroidAssets({ publicDir, manifestFile, outputDir })
     },
   };
   const manifests = [['assets.json', manifest]];
-  try {
-    manifests.push(['local-assets.json', JSON.parse(await fs.readFile(path.join(path.dirname(manifestFile), 'local-assets.json'), 'utf8'))]);
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  for (const name of ['local-assets.json', 'local-fx.json']) {
+    try {
+      manifests.push([name, JSON.parse(await fs.readFile(path.join(path.dirname(manifestFile), name), 'utf8'))]);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   for (const [name, doc] of manifests) {
     for (const rels of rewriteManifest(doc, name, hashIndex).models) {
       const hash = hashIndex.modelHash(rels);
