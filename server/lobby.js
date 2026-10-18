@@ -489,9 +489,12 @@ export class Lobby {
     const seat = room?.seatOf(session.playerId);
     if (!room || !seat || seat.isBot || seat.left) return fail(ERR.NOT_IN_ROOM);
     const charId = msg.charId;
-    if (charId && !Object.values(this.getData().chess || {}).some((chess) => chess.charId === charId)) {
-      return fail(ERR.BAD_MSG, 'unknown room portrait');
-    }
+    // The picker lists the room's content set (a gameplay plugin may add operators), so check its data, not the
+    // server's vanilla data. The exclusions match cardOperators() in public/js/screens/room.js.
+    const data = this.dataFor(room);
+    const known = !charId || Object.values(data.chess || {}).some((chess) =>
+      chess && !chess.isDiy && chess.visible !== false && typeof chess.charId === 'string' && chess.charId === charId);
+    if (!known) return fail(ERR.BAD_MSG, 'unknown room portrait');
     session.card = charId || null;
     seat.card = session.card;
     this.broadcastState(room);

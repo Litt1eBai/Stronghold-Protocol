@@ -161,6 +161,19 @@ export function cardOperators(chessList) {
 }
 
 /**
+ * Send a changed seat card to the server. A refused request resolves to the card the room already shows, so the caller
+ * can put the local pick back in step; null means nothing was sent or the server accepted it.
+ * @param {{ request: (t: string, msg: { charId: string }) => Promise<any> }} net
+ * @param {{ charId: string, roomCard: string, known: boolean }} p
+ * @returns {Promise<string|null>}
+ */
+export async function syncRoomCard(net, { charId, roomCard, known }) {
+  if (charId === roomCard || (charId && !known)) return null;
+  try { await net.request('room.card', { charId }); return null; }
+  catch { return roomCard; }
+}
+
+/**
  * The seat card's portrait: the operator the player picked (room.state seats[].card, or one's own pick), else one of
  * the 5★/6★ operators chosen by the player id — the same on every client (null before the data loads).
  * @param {any} seat room.state seat @param {{ pool: any[], byChar: Map<string, any>, m: any, myId: any, myCard: string }} ctx
@@ -382,13 +395,21 @@ export function RoomScreen() {
   const pickCard = (charId) => {
     setMyCard(charId); savePref(CARD_PREF, charId); setPicking(false);
   };
-  // tell the server (teammates see it) once it knows room.card; a refused id stays local
+  // tell the server (teammates see it) once it knows room.card; a refused pick falls back to the room's card
   const mySeat = room?.seats?.find((s) => s?.playerId === me.playerId && !s.isBot && !s.left);
   const seatCard = mySeat?.card || '';
   useEffect(() => {
-    if (!CARD_SYNC || !mySeat || conn.status !== 'online' || seatCard === (myCard || '')) return;
-    if (myCard && !portraits.byChar.has(myCard)) return;
-    net.request('room.card', { charId: myCard || '' }).catch(() => {});
+    if (!CARD_SYNC || !mySeat || conn.status !== 'online') return;
+    let cancelled = false;
+    syncRoomCard(net, { charId: myCard || '', roomCard: seatCard, known: !myCard || portraits.byChar.has(myCard) })
+      .then((fallback) => {
+        if (cancelled || !alive.current || fallback == null) return;
+        // Keep the local pick in step with what the room actually shows; never leave "mine changed, teammates' not".
+        setMyCard(fallback);
+        savePref(CARD_PREF, fallback);
+        toast(t('同步失败'), 'warn');
+      });
+    return () => { cancelled = true; };
   }, [room?.code, !!mySeat, myCard, seatCard, conn.status, portraits]);
 
   // arrived through 搜寻队友 (match.found for this room): 搜寻成功 once

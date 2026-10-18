@@ -23,6 +23,14 @@ test('room portraits synchronize, survive reconnect and stay out of match inputs
     assert.equal((await observer.request({ t: 'room.card', charId: 'char_498_inside' })).code, 'NOT_IN_ROOM');
     assert.equal((await host.request({ t: 'room.card', charId: 'char_unknown' })).code, 'BAD_MSG');
     for (const charId of ['../secret', '<svg>', 'x'.repeat(65), null]) assert.ok(validateC2S({ t: 'room.card', charId }));
+    // The picker lists the room's content set, so setCard must check that data, not the server's vanilla chess table.
+    const realDataFor = srv.lobby.dataFor;
+    const vanilla = srv.lobby.safeData();
+    srv.lobby.dataFor = () => ({ ...vanilla, chess: { ...vanilla.chess,
+      chess_x_room_card_a: { chessId: 'chess_x_room_card_a', charId: 'char_x_room_card', name: '插件干员', visible: true } } });
+    await ok(host, { t: 'room.card', charId: 'char_x_room_card' });
+    await guest.waitFor('room.state', r => r.seats.some(s => s?.card === 'char_x_room_card'), 5000);
+    srv.lobby.dataFor = realDataFor;
     await ok(host, { t: 'room.card', charId: 'char_498_inside' });
     await guest.waitFor('room.state', r => r.seats.some(s => s?.card === 'char_498_inside'));
     await host.terminate();
