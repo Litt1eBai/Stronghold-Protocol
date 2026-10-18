@@ -1,207 +1,78 @@
+// Local preinstalled skins and preference migration beside the upstream 0.3.1 skin protocol.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DATA, makeMatch } from './match/harness.js';
-import { unitInfo } from '../server/sim/snapshot.js';
-import { renderInfo } from '../public/js/render/app/info.js';
-import { buildBattleSpec, createBattleFromSpec } from '../server/sim/spec.js';
-import { validateC2S } from '../shared/protocol.js';
-import { skinsStore, setSkins, installSkinsSync } from '../public/js/ui/skins.js';
-import { loadoutStore } from '../public/js/ui/loadoutSync.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DATA } from './match/harness.js';
+import { migrateLegacySkins } from '../public/js/ui/skins.js';
+import { skinChoiceCharId } from '../shared/protocol.js';
 import { writePlugin } from './helpers/pluginFixtures.js';
 
 const ID = 'chess_char_1_01_a';
+const CHAR = DATA.chess[ID].charId;
 const SKIN = 'char_498_inside@kitchen#2';
-const CH = DATA.chess[ID];
-const fixture = { ...DATA, assets: { ...DATA.assets, chars: { ...DATA.assets.chars,
-  [CH.charId]: { ...DATA.assets.chars[CH.charId], skins: { [SKIN]: { avatar: '/test.png' } } } } } };
 
-test('stored skins never replace a stand-in or a DIY operator body', () => {
-  const silver = 'chess_char_4_22_a';
-  const skin = 'char_172_svrash@winter#1';
-  const data = { ...DATA, assets: { ...DATA.assets, chars: { ...DATA.assets.chars,
-    [DATA.chess[silver].charId]: { ...DATA.assets.chars[DATA.chess[silver].charId],
-      skins: { [skin]: { avatar: '/test.png' } } },
-  } } };
-  const h = makeMatch({ data, seats: [{ seat: 0, playerId: 'p_0', connected: true, isBot: false,
-    notOwned: [silver], skins: { [silver]: skin },
-    diy: { chess_char_5_diy1_a: { charId: 'char_112_siege', skillIndex: 2, uniEquipId: 'uniequip_002_siege' } },
-  }] });
-  try {
-    const ps = h.m.players.get('p_0');
-    const standIn = ps.newPiece('chess', silver);
-    const diy = ps.newPiece('chess', 'chess_char_5_diy1_a');
-    ps.board.set('9,3', standIn);
-    ps.board.set('9,4', diy);
-    assert.equal(ps.skins[silver], skin, 'keep the choice for future owned matches');
-    assert.equal(ps.pieceView(standIn).skin, undefined);
-    assert.equal(ps.pieceView(diy).skin, undefined);
-    const input = ps.battleInput();
-    assert.equal(input.units.find(u => u.uid === standIn.uid).standIn, true);
-    assert.equal(input.units.find(u => u.uid === diy.uid).diy.charId, 'char_112_siege');
-    assert.ok(input.units.every(u => !u.skin));
-    const spec = buildBattleSpec({ battleId: 'skin-bodies', seed: 1, stageId: 'act2autochess_m01',
-      fieldKind: 'normal', players: [input], waves: [] }, { data });
-    const battle = createBattleFromSpec(spec, data);
-    assert.equal(battle.units.find(u => u.uid === diy.uid).def.raw.charId, 'char_112_siege');
-    assert.ok(battle.units.every(u => !u.skin));
-    const prep = h.m.prepFieldMeta(ps);
-    assert.ok(prep.units.every(u => !u.skin));
-  } finally { h.m.dispose(); }
+test('legacy chess-key preferences migrate to operator keys without replacing explicit operator choices', () => {
+  const legacy = { [ID]: SKIN, char_112_siege: 'siege@winter#1' };
+  assert.equal(migrateLegacySkins(legacy, null), legacy, 'wait for data before migrating');
+  assert.deepEqual(migrateLegacySkins(legacy, DATA.chess), { [CHAR]: SKIN, char_112_siege: 'siege@winter#1' });
+  const explicit = { [ID]: SKIN, [CHAR]: 'chosen-plugin-skin', chess_deleted: 'old' };
+  assert.deepEqual(migrateLegacySkins(explicit, DATA.chess), { [CHAR]: 'chosen-plugin-skin' });
+  assert.equal(skinChoiceCharId(ID, DATA), CHAR, 'old import files retain their choices');
+  assert.equal(skinChoiceCharId(CHAR, DATA), CHAR, 'new export files can be imported again');
+  assert.equal(skinChoiceCharId('char_112_siege', DATA), 'char_112_siege');
 });
 
-test('skin selection reaches public/prep views, promoted chess, battle specs and snapshots; resets and bots stay default', () => {
-  const h = makeMatch({ data: fixture, seats: [
-    { seat: 0, playerId: 'p_0', isBot: false, connected: true, skins: { [ID]: SKIN } },
-    { seat: 1, playerId: 'ai_0', isBot: true, connected: true, skins: { [ID]: SKIN } },
-  ] });
-  try {
-    const ps = h.m.players.get('p_0');
-    const piece = ps.newPiece('chess', CH.goldenId);
-    ps.board.set('7,3', piece);
-    assert.equal(ps.pieceView(piece).skin, SKIN);
-    assert.deepEqual(h.m.publicView().players.find(p => p.playerId === 'p_0').skins, { [ID]: SKIN });
-    assert.deepEqual(h.m.players.get('ai_0').skins, {});
-    const input = ps.battleInput('normal');
-    assert.equal(input.units[0].skin, SKIN);
-    const spec = buildBattleSpec({ battleId: 'skins', seed: 1, stageId: 'act2autochess_m01', fieldKind: 'normal', players: [input], waves: [] }, { data: fixture });
-    assert.equal(spec.players[0].units[0].skin, SKIN);
-    const battle = createBattleFromSpec(spec, fixture);
-    const unit = [...battle.units.values()].find(u => u.side === 'ally');
-    assert.equal(unit.skin, SKIN);
-    assert.equal(unitInfo(unit).skin, SKIN);
-    assert.equal(renderInfo(unitInfo(unit)).skin, SKIN);
-    assert.equal(h.m.setSkins('p_0', { [ID]: 'not-an-installed-skin', [CH.goldenId]: SKIN }).ok, true);
-    assert.deepEqual(ps.skins, {});
-    assert.equal(ps.pieceView(piece).skin, undefined);
-    assert.equal(h.m.publicView().players.find(p => p.playerId === 'p_0').skins, undefined);
-    assert.ok(h.m.setSkins('ai_0', { [ID]: SKIN }).error);
-  } finally { h.m.dispose(); }
+test('the preinstalled catalogue is usable by the upstream model-based picker', () => {
+  const skin = DATA.assets.chars[CHAR]?.skins?.[SKIN];
+  assert.ok(skin?.spine?.front?.skel);
+  assert.ok(skin?.avatar);
+  assert.equal(skin.portrait, skin.avatar, 'bundled skins use their own art even without a full illustration');
 });
 
-test('DIY skins follow the chosen operator through prep and combat, and never migrate to a different body', () => {
-  const charId = 'char_112_siege', skin = 'char_112_siege@winter#1';
-  const slot = 'chess_char_5_diy1_a';
-  const data = { ...DATA, assets: { ...DATA.assets, chars: { ...DATA.assets.chars,
-    [charId]: { skins: { [skin]: { avatar: '/test.png' } } },
-  } } };
-  const h = makeMatch({ data, seats: [{ seat: 0, playerId: 'p_0', connected: true, isBot: false,
-    skins: { [charId]: skin, [slot]: skin, char_unknown: skin },
-    diy: { [slot]: { charId, skillIndex: 2, uniEquipId: 'uniequip_002_siege' } },
-  }] });
-  try {
-    const ps = h.m.players.get('p_0');
-    assert.deepEqual(ps.skins, { [charId]: skin });
-    const piece = ps.newPiece('chess', slot);
-    ps.board.set('9,3', piece);
-    assert.equal(ps.pieceView(piece).skin, skin);
-    const input = ps.battleInput();
-    assert.equal(input.units[0].diy.charId, charId);
-    assert.equal(input.units[0].skin, skin);
-    const spec = buildBattleSpec({ battleId: 'diy-skin', seed: 1, stageId: 'act2autochess_m01',
-      fieldKind: 'normal', players: [input], waves: [] }, { data });
-    const battle = createBattleFromSpec(spec, data);
-    const unit = battle.units.find(u => u.uid === piece.uid);
-    assert.equal(unit.def.raw.charId, charId);
-    assert.equal(unit.skin, skin);
-    assert.equal(renderInfo(unitInfo(unit)).skin, skin);
-    assert.equal(ps.skinFor({ isDiy: true, charId: 'char_172_svrash', chessId: slot }), null);
-    ps.setSkins({ [charId]: 'unknown' });
-    assert.equal(ps.pieceView(piece).skin, undefined);
-  } finally { h.m.dispose(); }
-});
-
-test('skin protocol limits reject malformed or oversized maps', () => {
-  assert.equal(validateC2S({ t: 'room.skins', skins: { [ID]: SKIN } }), null);
-  assert.ok(validateC2S({ t: 'room.skins', skins: { [ID]: 'a/b' } }));
-  assert.ok(validateC2S({ t: 'room.skins', skins: Object.fromEntries(Array.from({ length: 161 }, (_, i) => ['chess_' + i, SKIN])) }));
-  assert.ok(validateC2S({ t: 'room.skin.install', skinId: SKIN }));
-});
-
-test('skin sync sends edits when the overlay closes, keeps latest replies, and resends after reconnect', async () => {
-  const sent = []; const callbacks = {}; const jobs = new Map(); let id = 0;
-  const sync = installSkinsSync({ net: { status: 'online', on: (name, fn) => { callbacks[name] = fn; return () => {}; },
-    request: async (t, payload) => { sent.push({ t, ...payload }); } }, timers: {
-      setTimeout: fn => { jobs.set(++id, fn); return id; }, clearTimeout: n => jobs.delete(n),
-    } });
-  try {
-    loadoutStore.set({ open: true }); setSkins({ [ID]: SKIN }); loadoutStore.set({ open: false });
-    await Promise.resolve();
-    assert.equal(sent.length, 1); assert.deepEqual(sent[0], { t: 'room.skins', skins: { [ID]: SKIN } });
-    await sync.flush(); assert.equal(sent.length, 1);
-    callbacks.welcome(); await sync.flush(); assert.equal(sent.length, 2);
-    setSkins({}); await sync.flush(); assert.deepEqual(sent.at(-1).skins, {});
-  } finally { sync.dispose(); setSkins({}); loadoutStore.set({ open: false }); }
-});
-
-test('room.skins validates selection, survives session resume, and follows the player into a room', async () => {
-  const { startServer } = await import('../server/index.js');
-  const { TestClient } = await import('./helpers/wsClient.js');
-  const srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true });
-  const clients = [];
-  try {
-    const c = await TestClient.connect(`ws://127.0.0.1:${srv.port}/ws`); clients.push(c);
-    const welcome = await c.hello('skin-test');
-    const selected = await c.request({ t: 'room.skins', skins: { [ID]: SKIN, [CH.goldenId]: SKIN } });
-    assert.equal(selected.t, 'ok');
-    await c.request({ t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
-    const room = await c.waitFor('room.state');
-    assert.ok(room.code);
-    await c.terminate();
-    const resumed = await TestClient.connect(`ws://127.0.0.1:${srv.port}/ws`); clients.push(resumed);
-    const w = await resumed.hello('skin-test', welcome.token);
-    assert.equal(w.playerId, welcome.playerId);
-    // Start a real match: public state is the teammate/observer wire format.
-    assert.equal((await resumed.request({ t: 'room.start' })).t, 'ok');
-    const pub = await resumed.waitFor('m.public');
-    assert.deepEqual(pub.players.find(p => p.playerId === w.playerId).skins, { [ID]: SKIN });
-    assert.equal((await resumed.request({ t: 'room.skins', skins: {} })).t, 'ok');
-    const cleared = await resumed.waitFor('m.public', p => !p.players.find(x => x.playerId === w.playerId)?.skins);
-    assert.equal(cleared.players.find(p => p.playerId === w.playerId).skins, undefined);
-  } finally { for (const c of clients) await c.terminate(); await srv.close(); }
-});
-
-test('skins survive gameplay content isolation and change through the real match child; persistent plugin directory is honored', { timeout: 40_000 }, async () => {
-  const { startServer } = await import('../server/index.js');
-  const { TestClient } = await import('./helpers/wsClient.js');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-skin-plugin-'));
-  writePlugin(path.join(dir, 'skin-room'), { manifest: 2, version: '1.0.0', app: '*', api: 1,
-    class: 'content', scope: ['room'], permissions: ['data.patch'], data: ['patch.json'] },
-  { 'patch.json': { patch: 1, ops: [] } });
-  const original = process.env.SP_PLUGINS_DIR;
-  let srv, client;
-  try {
+for (const isolated of [false, true]) {
+  test(`preinstalled skin choices survive reconnect and update a ${isolated ? 'content-isolated' : 'vanilla'} match`, { timeout: 40000 }, async () => {
+    const { startServer } = await import('../server/index.js');
+    const { AuthStore } = await import('../server/auth.js');
+    const { TestClient } = await import('./helpers/wsClient.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-installed-skins-'));
+    if (isolated) writePlugin(path.join(dir, 'skin-room'), { manifest: 2, version: '1.0.0', app: '*', api: 1,
+      class: 'content', scope: ['room'], permissions: ['data.patch'], data: ['patch.json'] },
+    { 'patch.json': { patch: 1, ops: [] } });
+    const srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, pluginsDir: dir, assetIndex: false,
+      auth: new AuthStore({ required: false }) });
+    const clients = [];
+    const connect = async token => {
+      const c = await TestClient.connect(`ws://127.0.0.1:${srv.port}/ws`); clients.push(c);
+      c.welcome = await c.hello('skin-test', token); return c;
+    };
+    const ok = async (c, msg) => { const r = await c.request(msg, 20000); assert.equal(r.t, 'ok', `${msg.t}: ${JSON.stringify(r)}`); };
     try {
-      process.env.SP_PLUGINS_DIR = dir;
-      srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, assetIndex: false });
+      const first = await connect();
+      await ok(first, { t: 'room.skins', skins: { [CHAR]: SKIN } });
+      assert.equal((await first.request({ t: 'room.skins', skins: { [ID]: SKIN } })).code, 'BAD_MSG');
+      await ok(first, { t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
+      const initial = await first.waitFor('room.state');
+      await first.terminate();
+      const client = await connect(first.welcome.token);
+      assert.equal(client.welcome.playerId, first.welcome.playerId);
+      if (isolated) {
+        await ok(client, { t: 'room.setPlugins', plugins: [{ id: 'skin-room' }] });
+        const room = await client.waitFor('room.state', r => r.content?.vanilla === false, 20000);
+        await ok(client, { t: 'room.contentReady', cs: room.content.cs });
+      }
+      await ok(client, { t: 'room.start' });
+      const pub = await client.waitFor('m.public', m => m.players.some(p => p.playerId === client.welcome.playerId), 20000);
+      assert.deepEqual(pub.players.find(p => p.playerId === client.welcome.playerId).skins, { [CHAR]: SKIN });
+      if (isolated) assert.equal(srv.lobby.getRoom(initial.code).match.hosted, true);
+      await ok(client, { t: 'room.skins', skins: {} });
+      await client.waitFor('m.public', m => !m.players.find(p => p.playerId === client.welcome.playerId)?.skins, 20000);
+      await ok(client, { t: 'room.skins', skins: { [CHAR]: SKIN } });
+      await client.waitFor('m.public', m => m.players.find(p => p.playerId === client.welcome.playerId)?.skins?.[CHAR] === SKIN, 20000);
     } finally {
-      if (original === undefined) delete process.env.SP_PLUGINS_DIR;
-      else process.env.SP_PLUGINS_DIR = original;
+      for (const client of clients) await client.terminate();
+      await srv.close(); fs.rmSync(dir, { recursive: true, force: true });
     }
-    client = await TestClient.connect(`ws://127.0.0.1:${srv.port}/ws`);
-    const welcome = await client.hello('skin-child');
-    const ok = async (msg) => assert.equal((await client.request(msg, 20_000)).t, 'ok');
-    await ok({ t: 'room.skins', skins: { [ID]: SKIN } });
-    await ok({ t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
-    await ok({ t: 'room.setPlugins', plugins: [{ id: 'skin-room' }] });
-    const room = await client.waitFor('room.state', r => r.content?.vanilla === false, 20_000);
-    await ok({ t: 'room.contentReady', cs: room.content.cs });
-    await ok({ t: 'room.start' });
-    const pub = await client.waitFor('m.public', m => m.players.some(p => p.playerId === welcome.playerId), 20_000);
-    assert.deepEqual(pub.players.find(p => p.playerId === welcome.playerId).skins, { [ID]: SKIN });
-    assert.equal(srv.lobby.getRoom(room.code).match.hosted, true);
-    await ok({ t: 'room.skins', skins: {} });
-    await client.waitFor('m.public', m => !m.players.find(p => p.playerId === welcome.playerId)?.skins, 20_000);
-    await ok({ t: 'room.skins', skins: { [ID]: SKIN, [CH.goldenId]: SKIN } });
-    const changed = await client.waitFor('m.public', m => !!m.players.find(p => p.playerId === welcome.playerId)?.skins, 20_000);
-    assert.deepEqual(changed.players.find(p => p.playerId === welcome.playerId).skins, { [ID]: SKIN });
-    await ok({ t: 'room.skins', skins: { [ID]: 'not-installed' } });
-    await client.waitFor('m.public', m => !m.players.find(p => p.playerId === welcome.playerId)?.skins, 20_000);
-  } finally {
-    await client?.terminate();
-    await srv?.close();
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
+  });
+}

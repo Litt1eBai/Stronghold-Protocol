@@ -31,6 +31,7 @@ import {
   html, Button, Icon, MicroLabel, AvatarFrame, DifficultyIcon, Tooltip, confirmDialog, doctorNo, Spinner, Modal,
 } from '../ui/components.js';
 import { toast, toastError } from '../ui/toasts.js';
+import { TestMark } from '../ui/testConsole.js';
 import { copyText } from '../ui/clipboard.js';
 import { GuideButton } from '../ui/guide.js';
 import { openStats } from './stats.js';
@@ -506,7 +507,7 @@ export function RoomScreen() {
   const setAiLast = (on) => run('ailast', () => net.request('room.setAiPicksLast', { on }));
   // spectator seats: the host frees one; a spectator takes a free player seat with room.join of this room
   const removeSpectator = (playerId) => run(`rs${playerId}`, () => net.request('room.removeSpectator', { playerId }));
-  const sit = () => run('sit', () => net.request('room.join', { code: room.code }));
+  const sit = () => run('sit', () => net.request('room.join', { code: room.code, ...(room.test ? { testAck: true } : {}) }));
   const copy = async (what) => {
     const modeLabel = '';
     const ok = await copyText(what === 'code' ? room.code : t('{0} {name}邀请你加入卫戍协议：盟约【{modeLabel}{3}】', { 0: inviteLink(room.code), name: me.name, modeLabel, 3: DIFFICULTY_NAMES[room.difficulty] }));
@@ -573,6 +574,7 @@ export function RoomScreen() {
         </div>
       </div>
       <div class="rs-top__right">
+        ${room.test ? html`<${TestMark} />` : null}
         <${PluginTag} room=${room} myId=${me.playerId} />
         ${room.content?.modeId ? html`<span class="room-mode">${room.content.modes?.find((m) => m.id === room.content.modeId)?.name || room.content.modeId}</span>` : null}
         <${LoadoutButton} from="room" size="md" class="hub-plate hub-plate--loadout rs-loadout" label=${t('干员调配')} />

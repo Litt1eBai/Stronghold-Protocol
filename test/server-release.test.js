@@ -20,6 +20,8 @@ test('runtime staging excludes credentials, accounts and stale update announceme
       'server/index.js', 'shared/constants.js', 'data/chess.json', 'public/index.html', 'public/updates/android.json', '.cache/accounts.json', '.env']) {
       await writeFile(path.join(source, file), '{}');
     }
+    // The server shares pure helpers with browser rendering and studio authoring since 0.3.1.
+    for (const folder of ['public/js', 'public/studio/js']) await cp(path.resolve(folder), path.join(source, folder), { recursive: true });
     for (const resource of SERVER_PLUGIN_RESOURCES) {
       await cp(path.resolve(resource), path.join(source, resource), { recursive: true });
     }

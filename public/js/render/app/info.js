@@ -27,7 +27,6 @@ export function renderInfo(u) {
   return {
     id: u.id, uid: u.uid ?? null, kind: u.kind || 'enemy', side: u.side === 'ally' ? 'ally' : 'enemy', ownerId: u.ownerId ?? null,
     defId: u.defId ?? null, name: u.name ?? '', tier: u.tier ?? 1, golden: !!u.golden, spine: u.spine ?? u.defId ?? null,
-    skin: !u.standInFor && typeof u.skin === 'string' ? u.skin : null,
     avatar: u.avatar ?? u.defId ?? null, x: Number(u.x) || 0, y: Number(u.y) || 0, facing: u.facing === -1 ? -1 : 1,
     maxHp: Number(u.maxHp) || 1, boss: !!u.boss, motion: u.motion,
     // deploy direction of allies (UnitInfo.dir, DESIGN §3): the model (Back for UP, mirrored for LEFT) and the
@@ -56,5 +55,9 @@ export function renderInfo(u) {
     diy: u.diy && typeof u.diy === 'object' && typeof u.diy.charId === 'string'
       ? { charId: u.diy.charId, skillIndex: Number.isInteger(u.diy.skillIndex) ? u.diy.skillIndex : null, uniEquipId: typeof u.diy.uniEquipId === 'string' ? u.diy.uniEquipId : null }
       : undefined,
+    // 干员皮肤 (docs/SKINS.md): the owning player's chosen skinId, sent with the snapshot (UnitInfo.skin) — the view asks
+    // assets.js for that appearance's Spine / avatar and falls back to the operator's own model when the manifest has no
+    // such skin. render/app.js clears it for another player's unit while 设置「显示其他玩家的皮肤」 is off.
+    skin: typeof u.skin === 'string' && u.skin ? u.skin : null,
   };
 }

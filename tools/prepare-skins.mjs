@@ -52,7 +52,7 @@ export async function addSkinAssets(manifest, { root = ROOT, offline = false, lo
     if (!spine.front) throw new Error(`Skin has no Front model: ${skin.skinId}`);
     const char = manifest.chars[charId];
     char.skins ||= {};
-    char.skins[skin.skinId] = { name: skin.name, group: skin.group || '', avatar: `/assets/${avatar.rel}`, spine };
+    char.skins[skin.skinId] = { name: skin.name, group: skin.group || '', avatar: `/assets/${avatar.rel}`, portrait: `/assets/${avatar.rel}`, spine };
   }
   await dl.saveLedger();
   log(`[skins] validated ${skins.length} skins, ${processed.entries.size} models`);

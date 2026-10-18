@@ -55,7 +55,7 @@ test('paper hub on desktop and touch: local backdrop, reports, quick skins, port
         const card = '.lo-op[data-chess="chess_char_1_01_a"]';
         await page.waitForSelector(`${card} .lo-q--skin:nth-child(2)`);
         await page.$eval(`${card} .lo-q--skin:nth-child(2)`, e => e.click());
-        await page.waitForFunction(() => JSON.parse(localStorage.getItem('sp.pref.skins') || '{}').chess_char_1_01_a === 'char_498_inside@kitchen#2');
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem('sp.pref.skins') || '{}').char_498_inside === 'char_498_inside@kitchen#2');
         // The card must use the selected manifest URL, not merely store a selection.
         await page.waitForFunction(() => document.querySelector('.lo-op[data-chess="chess_char_1_01_a"] .lo-op__art img')?.src.includes('char_498_inside_kitchen_2'));
         await page.evaluate(async () => (await import('/js/ui/loadoutSync.js')).closeLoadout());

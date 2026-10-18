@@ -1,5 +1,4 @@
 import { skinsStore, setSkins, setSkin, clearSkin, availableSkins, skinFor } from '../ui/skins.js';
-import { SkinSection } from '../ui/skinPicker.js';
 // 干员调配 (Operator loadout, DESIGN §16): choose the equipped skill of every chess and the module of its elite before a
 // match (official rule: "开始游戏前无法调整干员的等级，但可调整其所携带的技能和模组"). A full-screen overlay opened
 // from the lobby, the room and the briefing (INFO_CHECK) — `openLoadout(from)` / <LoadoutButton/>; <LoadoutHost/> is
@@ -36,6 +35,7 @@ import { GarrisonBlock } from '../ui/detailPanel.js';
 import { data, useData, localAsset, DATA_FILES } from '../data.js';
 import { useStore, loadPref, savePref } from '../store.js';
 import { PHASE } from '../../../shared/constants.js';
+import { ruleOption } from '../../../shared/plugins/rules.js';
 import {
   MODULE_NONE, PROF_ORDER, PROF_NAME, rosterOf, filterRoster, recordsOf, chessOptions, effectiveChoice, setChoice, resetChoice,
   changedCount, skillLabel, moduleBadge, attrRows, skillTags, quickSkillTags, traitLines, mergeSkins, serializeExport, parseImport, LOADOUT_IMPORT_MAX_BYTES,
@@ -43,6 +43,9 @@ import {
 } from '../ui/loadoutModel.js';
 import { loadoutStore, openLoadout, closeLoadout, setEntries, setOpsMap, applyLoadoutEntries, setNotOwned, applyOwnershipImport, setDiyPicks, applyDiyImport } from '../ui/loadoutSync.js';
 import { OperatorVoice } from '../ui/operatorVoice.js';
+// 皮肤 (docs/SKINS.md): a self-contained section — everything it does lives in ui/skinPicker.js, so this screen keeps
+// one import and one line in its detail body
+import { SkinSection } from '../ui/skinPicker.js';
 import { CultivationSelects, CultivationSection, cultivationView, potentialEditable } from './cultivation.js';
 import { skinChoiceCharId, cultivationCharIds } from '../../../shared/protocol.js';
 import { atPotential } from '../../../shared/potential.js';
@@ -213,7 +216,7 @@ export function RosterHead() {
  * 「替补」 tag: its stand-in fights with a fixed skill and no 潜能 / 练度, the choices here apply once it is owned again.
  */
 export function RosterRow({ m, chess, golden, entries, ops = {}, selected, onPick, onChange, onOps, level = 'normal', notOwned = false }) {
-  const skins = skinsStore.get().entries;
+  const skins = skinsStore.get().skins;
   const choice = effectiveChoice(entries, chess, golden);
   const opt = chessOptions(chess, golden);
   const cv = cultivationView(chess.charId, ops);
@@ -222,7 +225,7 @@ export function RosterRow({ m, chess, golden, entries, ops = {}, selected, onPic
   const elite = level === 'elite' && !!golden;
   const slots = [0, 1, 2].map((i) => opt.skillOptions[i] || null);
   const standInNote = notOwned ? t('未持有（干员持有）：由替补干员上场，替补干员没有潜能与练度') : null;
-  const chosenSkin = skins?.[chess.chessId] || skinFor(chess.chessId) || null;
+  const chosenSkin = skins?.[chess.charId] || skinFor(chess.charId) || null;
   const customChess = chosenSkin ? { ...chess, skin: chosenSkin } : chess;
   return html`<div role="listitem" data-chess=${chess.chessId} data-variant=${elite ? 'elite' : 'normal'}
       class=${cx('lo-card', `lo-card--t${chess.tier}`, selected && 'is-sel', changed && 'is-changed', notOwned && 'is-standin')}>
@@ -328,12 +331,10 @@ const standInName = (chess) => data.get('backups')?.units?.[chess?.backup?.charI
 
 
 function Detail({ m, chess, golden, entries, ops = {}, onChange, onOps, onReset, locked, level = 'normal', onLevel, notOwned = false }) {
-  const [tab, setTab] = useState('skill');
-  const activeTab = tab;
   const [statLevel, setStatLevel] = useState('elite'); // 局内数值: the 精锐 shows the chosen module's effect
   const setLevel = onLevel;
   const bodyRef = useRef(null);
-  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0; }, [chess?.chessId, activeTab]);
+  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0; }, [chess?.chessId]);
   if (!chess) return html`<aside class="lo-detail lo-detail--empty"><p class="t-dim">${t('没有符合条件的干员')}</p></aside>`;
   const opt = chessOptions(chess, golden);
   const choice = effectiveChoice(entries, chess, golden);
@@ -358,19 +359,20 @@ function Detail({ m, chess, golden, entries, ops = {}, onChange, onOps, onReset,
         <span class="lo-dhead__bonds">${(chess.bonds || []).map((b) => html`<span key=${b} class="lo-bond">
           <${Img} src=${bondIconUrl(m, b)} class="lo-bond__icon" fallback=${html`<i class="lo-bond__dot"></i>`} />${data.lookup('bonds', b)?.name || b}</span>`)}</span>
       </div>
-      <${Button} variant="ghost" size="sm" icon="refresh" class="lo-dhead__reset" disabled=${!changed && !skinsStore.get().entries[chess.chessId]} onClick=${onReset}>${t('恢复默认')}<//>
-    </div>
-    <div class="lo-dtabs" role="tablist" aria-label=${t('调配项目')}>
-      ${[['skill', N_('干员调配'), 'LOADOUT'], ['skin', N_('换装'), 'SKIN']].map(([id, label, en]) => html`
-        <button type="button" role="tab" aria-selected=${activeTab === id ? 'true' : 'false'} class=${cx('lo-dtab', activeTab === id && 'is-on')} onClick=${() => setTab(id)}>
-          ${t(label)} <span class="lo-dtab__en num">${en}</span>
-        </button>`)}
+      <${Button} variant="ghost" size="sm" icon="refresh" class="lo-dhead__reset" disabled=${!changed} onClick=${onReset}>${t('恢复默认')}<//>
     </div>
     <div class="lo-detail__body" ref=${bodyRef}>
-      <${OperatorVoice} charId=${chess.charId} />
+      <${OperatorVoice} charId=${chess.assets?.voice || chess.charId} />
+      ${/* 外观 (docs/SKINS.md) sits directly under the operator's name, before 潜能与练度 and above the 技能 /
+           局内数值 / 模组 sections: a skill and a module usually keep their default and the two selects are a one-off,
+           while the appearance is what a player opens the panel to change. The section itself lives in ui/skinPicker.js
+           (one line here, so upstream rewriting this panel costs one line rather than a conflict). Whether it exists
+           is a GLOBAL question — any operator of the manifest wearing something — so an install without a cosmetic
+           layer keeps the panel's shape, while a loaded plugin gives every operator the section (one 默认 tile when
+           it has no skin). */ null}
+      <${SkinSection} charId=${chess.charId} />
       <${CultivationSection} charId=${chess.charId} ops=${ops} onSet=${onOps} standIn=${notOwned} />
       <${LoadoutGarrisons} chess=${level === 'elite' && golden ? golden : chess} m=${m} />
-      ${activeTab === 'skill' ? html`
       <section class="lo-sec">
         <header class="lo-sec__head">
           <h3>${t('技能')}<${MicroLabel}>SKILL<//></h3>
@@ -404,8 +406,6 @@ function Detail({ m, chess, golden, entries, ops = {}, onChange, onOps, onReset,
         </div>
         ${modOpt ? html`<${ModuleInfo} m=${m} golden=${golden} opt=${modOpt} potential=${cv.potentialOn ? cv.potential : null} />` : null}
       </section>` : null}
-      ` : null}
-      ${activeTab === 'skin' ? html`<${SkinSection} chess=${chess} />` : null}
       ${notOwned ? html`<p class="lo-locknote lo-locknote--standin" data-testid="loadout-standin-note"><${Icon} name="info" />${standInName(chess) ? t('干员持有中标记为未持有：此棋子由替补干员 {name} 上场，技能与模组固定（补位干员技能不可更改）；这里的调配在改回「持有」后生效', { name: standInName(chess) })
         : t('干员持有中标记为未持有：此棋子由替补干员上场，技能与模组固定（补位干员技能不可更改）；这里的调配在改回「持有」后生效')}</p>` : null}
       ${locked ? html`<p class="lo-locknote"><${Icon} name="info" />${t('本局的调配已锁定，修改将在下一局生效')}</p>` : null}
@@ -470,7 +470,7 @@ function PotPips({ n }) {
  * column of quick choices beside the card — the same handlers as the list's RosterRow.
  */
 export function OpCard({ m, chess, golden, entries, ops = {}, selected = false, quick = null, onPick, onChange, onOps, notOwned = false }) {
-  const skins = skinsStore.get().entries;
+  const skins = skinsStore.get().skins;
   const choice = effectiveChoice(entries, chess, golden);
   const opt = chessOptions(chess, golden);
   const cv = opsOf(ops, chess.charId);
@@ -480,7 +480,7 @@ export function OpCard({ m, chess, golden, entries, ops = {}, selected = false, 
   const mod = golden ? opt.moduleOptions.find((x) => x.id === choice.module) || null : null;
   const modules = [...opt.moduleOptions].sort((a, b) => Number(b.id === MODULE_NONE) - Number(a.id === MODULE_NONE));
   const standInNote = notOwned ? t('未持有（干员持有）：由替补干员上场，替补干员没有潜能与练度') : null;
-  const chosenSkin = skins?.[chess.chessId] || skinFor(chess.chessId) || null;
+  const chosenSkin = skins?.[chess.charId] || skinFor(chess.charId) || null;
   const customChess = chosenSkin ? { ...chess, skin: chosenSkin } : chess;
   return html`<div role="listitem" data-chess=${chess.chessId}
       class=${cx('lo-op', `lo-op--t${chess.tier}`, selected && 'is-sel', changed && 'is-changed', notOwned && 'is-standin', quick && 'is-quick')}>
@@ -519,13 +519,13 @@ export function OpCard({ m, chess, golden, entries, ops = {}, selected = false, 
       : quick === 'cult' ? html`<div class="lo-op__quick lo-op__quick--cult"><${CultivationSelects} charId=${chess.charId} ops=${ops} onSet=${onOps} note=${standInNote} /></div>`
       : quick === 'skin' ? html`<div class="lo-op__quick lo-quick" role="group" aria-label=${t('选择皮肤')}>
         ${(() => {
-          const list = availableSkins(chess.charId);
+          const list = availableSkins(chess.charId).filter((x) => !x.own && x.playable);
           const chosen = chosenSkin;
           const defaultArt = data.get('assets')?.chars?.[chess.charId]?.avatar || null;
           if (!list || !list.length) return html`<span class="lo-op__none">${t('无时装')}</span>`;
           return html`
-            <${QuickSkin} m=${m} chessId=${chess.chessId} charId=${chess.charId} skin=${null} on=${!chosen} defaultArt=${defaultArt} onPick=${() => clearSkin(chess.chessId)} />
-            ${list.map((sk) => html`<${QuickSkin} key=${sk.id} m=${m} chessId=${chess.chessId} charId=${chess.charId} skin=${sk} on=${chosen === sk.id} defaultArt=${defaultArt} onPick=${(id) => setSkin(chess.chessId, id)} />`)}
+            <${QuickSkin} m=${m} chessId=${chess.chessId} charId=${chess.charId} skin=${null} on=${!chosen} defaultArt=${defaultArt} onPick=${() => clearSkin(chess.charId)} />
+            ${list.map((sk) => html`<${QuickSkin} key=${sk.id} m=${m} chessId=${chess.chessId} charId=${chess.charId} skin=${sk} on=${chosen === sk.id} defaultArt=${defaultArt} onPick=${(id) => setSkin(chess.charId, id)} />`)}
           `;
         })()}
       </div>` : null}
@@ -773,7 +773,7 @@ export function canResetLoadout(nChanged, nSkins) {
 
 /** The overlay screen (`leaving`: closed, fading out). */
 function LoadoutScreen({ st, leaving = false }) {
-  const ready = useData('chess', 'bonds', 'assets', 'local', 'backups', 'garrisons', 'effects', 'skins');
+  const ready = useData('chess', 'bonds', 'assets', 'local', 'backups', 'garrisons', 'effects');
   const phase = useStore((s) => s.match?.public?.phase || null);
   const inMatch = useStore((s) => !!s.room?.inMatch);
   // co-op briefing (INFO_CHECK, 25 s): the overlay covers the briefing's own countdown, so it shows the time left — the
@@ -791,10 +791,14 @@ function LoadoutScreen({ st, leaving = false }) {
   const list = filterRoster(roster, st.filters, st.entries, getChess, getBond, st.ops, potentialEditable);
   const selId = st.sel && roster.some((c) => c.chessId === st.sel) ? st.sel : list[0]?.chessId || roster[0]?.chessId || null;
   const { base, golden } = selId ? recordsOf(selId, getChess) : { base: null, golden: null };
-  const skinEntries = useStore((s) => s.entries, Object.is, skinsStore);
+  const skinEntries = useStore((s) => s.skins, Object.is, skinsStore);
   const nSkins = Object.keys(skinEntries).length;
   const nChanged = changedCount(st.entries, getChess, st.ops, roster, potentialEditable);
-  const locked = (inMatch && phase && phase !== PHASE.INFO_CHECK && phase !== PHASE.LOBBY) || st.sync === 'locked';
+  const rules = useStore((s) => s.room?.content?.rules ?? null);
+  const seatReady = useStore((s) => !!s.match?.private?.ready);
+  // prepLoadout 'prep': the panel stays editable in 休整期 until this seat presses 准备
+  const prepOpen = phase === PHASE.PREP && ruleOption(rules, 'prepLoadout') === 'prep' && !seatReady;
+  const locked = ((inMatch && phase && phase !== PHASE.INFO_CHECK && phase !== PHASE.LOBBY) && !prepOpen) || st.sync === 'locked';
   const gridRef = useRef(null);
   const fileRef = useRef(null);                            // hidden <input type=file> of the 导入 dialog
   const [narrowDetail, setNarrowDetail] = useState(false); // phones: the detail slides over the roster
@@ -856,7 +860,7 @@ function LoadoutScreen({ st, leaving = false }) {
   const resetOne = () => {
     if (!base) return;
     setOpsMap(resetOps(loadoutStore.get().ops, base.charId));
-    clearSkin(base.chessId);
+    clearSkin(base.charId);
     setEntries(resetChoice(loadoutStore.get().entries, base.chessId));
   };
   const resetAll = async () => {
@@ -880,7 +884,7 @@ function LoadoutScreen({ st, leaving = false }) {
   const openExport = () => setIo(tab === 'ownership'
     ? { mode: 'export', kind: 'ownership', text: serializeOwnership(loadoutStore.get().notOwned) }
     : tab === 'diy' ? { mode: 'export', kind: 'diy', text: serializeDiy(loadoutStore.get().diy) }
-      : { mode: 'export', kind: 'loadout', text: serializeExport(loadoutStore.get().entries, { ops: loadoutStore.get().ops, skins: skinsStore.get().entries }) });
+      : { mode: 'export', kind: 'loadout', text: serializeExport(loadoutStore.get().entries, { ops: loadoutStore.get().ops, skins: skinsStore.get().skins }) });
   const openImport = () => setIo({ mode: 'import', kind: tab, text: '' });
   const ioCopy = async () => {
     const ok = await copyText(ioText);
@@ -933,12 +937,12 @@ function LoadoutScreen({ st, leaving = false }) {
     const acceptedSkins = {};
     for (const [id, skin] of Object.entries(res.skins || {})) {
       const charId = skinChoiceCharId(id, { chess: data.get('chess'), backups: data.get('backups') });
-      if (charId && data.get('assets')?.chars?.[charId]?.skins?.[skin]) acceptedSkins[id] = skin;
+      if (charId && data.get('assets')?.chars?.[charId]?.skins?.[skin]) acceptedSkins[charId] = skin;
     }
     const skinsApplied = Object.keys(acceptedSkins).length;
     // nothing survived sanitising (unknown chess, or every choice already the default): keep the current loadout
     if (!applied && !nOps && !skinsApplied) { toast(t('导入失败：这份数据在当前版本没有可用的调配，未做任何改动'), 'error'); return; }
-    if (skinsApplied) setSkins(mergeSkins(skinsStore.get().entries, acceptedSkins));
+    if (skinsApplied) setSkins(mergeSkins(skinsStore.get().skins, acceptedSkins));
     setIo(null);
     toast(skinsApplied ? t('已导入 {applied} 名干员配置和 {skinsApplied} 款皮肤（另有 {dropped} 项未导入）', { applied, skinsApplied, dropped })
       : !applied ? t('已导入 {n} 名干员的潜能与练度', { n: nOps })
@@ -1229,10 +1233,12 @@ function LoadoutScreen({ st, leaving = false }) {
  * Whether the overlay must close because its context moved on: opened from the briefing and the match left INFO_CHECK
  * (the strategy draft needs the player), or opened from the lobby / room and a match started (its briefing takes over).
  * @param {{ open: boolean, from: string|null }} st @param {string|null} phase @param {boolean} inMatch @param {boolean} wasInMatch
+ * @param {boolean} [ready] this seat has pressed 准备 (closes a panel opened from prep)
  */
-export function shouldAutoClose(st, phase, inMatch, wasInMatch) {
+export function shouldAutoClose(st, phase, inMatch, wasInMatch, ready = false) {
   if (!st || !st.open) return false;
   if (st.from === 'briefing') return !!phase && phase !== PHASE.INFO_CHECK;
+  if (st.from === 'prep') return phase !== PHASE.PREP || !!ready;
   return inMatch && !wasInMatch;
 }
 
@@ -1241,11 +1247,12 @@ export function LoadoutHost() {
   const st = useStore((s) => s, Object.is, loadoutStore);
   const phase = useStore((s) => s.match?.public?.phase || null);
   const inMatch = useStore((s) => !!s.room?.inMatch);
+  const ready = useStore((s) => !!s.match?.private?.ready);
   const wasInMatch = useRef(inMatch);
   useEffect(() => {
-    if (shouldAutoClose(st, phase, inMatch, wasInMatch.current)) closeLoadout();
+    if (shouldAutoClose(st, phase, inMatch, wasInMatch.current, ready)) closeLoadout();
     wasInMatch.current = inMatch;
-  }, [phase, inMatch, st.open]);
+  }, [phase, inMatch, st.open, ready]);
   useEffect(() => {
     if (st.open) document.documentElement.classList.add('sp-loadout-open');
     else document.documentElement.classList.remove('sp-loadout-open');
@@ -1270,7 +1277,7 @@ export function badgeCount(entries, getChess, ops = null, roster = null) {
 
 /**
  * Entry button (lobby / room / briefing).
- * @param {{ from: 'lobby'|'room'|'briefing', size?: string, variant?: string, class?: string, label?: string }} props
+ * @param {{ from: 'lobby'|'room'|'briefing'|'prep', size?: string, variant?: string, class?: string, label?: string }} props
  */
 export function LoadoutButton({ from, size = 'md', variant = 'secondary', class: cls, label = t('干员调配') }) {
   useData('local'); // the official preset icon (re-render once the local-art manifest arrives)
