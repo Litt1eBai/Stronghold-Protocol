@@ -91,3 +91,4 @@ master:
           options:
             overlying: true
             latest: true
+            descriptionFromFile: client/artifacts/android/release-notes.txt
