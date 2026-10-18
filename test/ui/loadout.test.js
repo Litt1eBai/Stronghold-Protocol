@@ -17,7 +17,7 @@ import {
 } from '../../public/js/ui/loadoutModel.js';
 import { installLoadoutSync, SYNC_DEBOUNCE_MS, RETRY_MS, applyLoadoutEntries, setEntries, loadoutStore } from '../../public/js/ui/loadoutSync.js';
 import { createStore } from '../../public/js/store.js';
-import { shouldAutoClose } from '../../public/js/screens/loadout.js';
+import { shouldAutoClose, canResetLoadout } from '../../public/js/screens/loadout.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CHESS = JSON.parse(readFileSync(path.join(ROOT, 'data/chess.json'), 'utf8'));
@@ -126,6 +126,13 @@ test('options: skill records at Lv4 (normal) and Lv7 (elite); modules + 不装�
   assert.equal(o.moduleOptions[1].rec, null);
   const s = chessOptions(SB, SG);
   assert.equal(s.moduleOptions.length, SG.modules.length + 1);
+});
+
+test('全部恢复默认 is offered when only a skin changed (P2)', () => {
+  assert.equal(canResetLoadout(0, 0), false, 'nothing to reset');
+  assert.equal(canResetLoadout(1, 0), true, 'a loadout edit');
+  assert.equal(canResetLoadout(0, 1), true, 'a skin-only change (the card view missed this)');
+  assert.equal(canResetLoadout(2, 3), true, 'both');
 });
 
 test('choices: set / reset keep only non-default entries; effectiveChoice falls back to defaults', () => {

@@ -766,6 +766,11 @@ export function DataMissing({ files }) {
   </div>`;
 }
 
+/** Whether 全部恢复默认 has anything to reset: roster edits or a skin selection (the card view and top bar share it). */
+export function canResetLoadout(nChanged, nSkins) {
+  return nChanged > 0 || nSkins > 0;
+}
+
 /** The overlay screen (`leaving`: closed, fading out). */
 function LoadoutScreen({ st, leaving = false }) {
   const ready = useData('chess', 'bonds', 'assets', 'local', 'backups', 'garrisons', 'effects', 'skins');
@@ -855,7 +860,7 @@ function LoadoutScreen({ st, leaving = false }) {
     setEntries(resetChoice(loadoutStore.get().entries, base.chessId));
   };
   const resetAll = async () => {
-    if (!nChanged && !nSkins) return;
+    if (!canResetLoadout(nChanged, nSkins)) return;
     const ok = await confirmDialog({ title: t('全部恢复默认'), text: t('将 {nChanged} 名干员的技能、模组、潜能与练度，以及 {nSkins} 款皮肤恢复为默认配置？', { nChanged, nSkins }), okText: t('恢复默认'), danger: true });
     if (!ok) return;
     // the roster's operators only: a 自选 pick's settings belong to the 自选编队 tab
@@ -1124,7 +1129,7 @@ function LoadoutScreen({ st, leaving = false }) {
               <button type="button" role="menuitem" data-testid="loadout-export" disabled=${!nChanged && !nSkins && !Object.keys(st.ops || {}).length}
                 onClick=${() => { setMenu(null); openExport(); }}><${Icon} name="copy" />${t('导出调配')}</button>
               <button type="button" role="menuitem" data-testid="loadout-import" disabled=${!ready} onClick=${() => { setMenu(null); openImport(); }}><${Icon} name="link" />${t('导入调配')}</button>
-              <button type="button" role="menuitem" class="is-danger" disabled=${!nChanged} onClick=${() => { setMenu(null); resetAll(); }}><${Icon} name="refresh" />${t('全部恢复默认')}</button>
+              <button type="button" role="menuitem" class="is-danger" disabled=${!canResetLoadout(nChanged, nSkins)} onClick=${() => { setMenu(null); resetAll(); }}><${Icon} name="refresh" />${t('全部恢复默认')}</button>
             </div>` : null}
           </div>
           <button type="button" class="lo-assist" data-testid="loadout-ownership" onClick=${() => { setMenu(null); setTab('ownership'); }}
@@ -1145,7 +1150,7 @@ function LoadoutScreen({ st, leaving = false }) {
         <${Button} variant="ghost" size="sm" onClick=${() => setView('deck')} title=${t('切换为卡片视图（物资调配处）')}>${t('卡片视图')}<//>
         <${Button} variant="ghost" size="sm" data-testid="loadout-export" disabled=${!nChanged && !nSkins && !Object.keys(st.ops || {}).length} onClick=${openExport} title=${t('导出当前调配（可复制或下载）')}>${t('导出')}<//>
         <${Button} variant="ghost" size="sm" data-testid="loadout-import" disabled=${!ready} onClick=${openImport} title=${t('导入调配（粘贴或选择文件）')}>${t('导入')}<//>
-        <${Button} variant="secondary" size="sm" icon="refresh" disabled=${!nChanged && !nSkins} onClick=${resetAll}>${t('全部恢复默认')}<//>
+        <${Button} variant="secondary" size="sm" icon="refresh" disabled=${!canResetLoadout(nChanged, nSkins)} onClick=${resetAll}>${t('全部恢复默认')}<//>
       </div>`}
     </header>
     ${tab === 'diy'
