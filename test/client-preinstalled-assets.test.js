@@ -73,3 +73,27 @@ test('packaged URL hashes match the served manifest and invalidate every Spine m
     }
   } finally { index.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test('Android preinstalls scene geometry and rejects missing optional-manifest references', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sp-scene-preinstalled-'));
+  try {
+    const publicDir = path.join(root, 'public'), outputDir = path.join(root, 'build');
+    const url = '/assets/local/scene/test/scene.bin';
+    await fs.mkdir(path.join(publicDir, 'assets/local/scene/test'), { recursive: true });
+    await fs.mkdir(path.join(publicDir, 'fonts'));
+    await fs.writeFile(path.join(publicDir, url.slice(1)), 'geometry');
+    const file = path.join(root, 'assets.json');
+    await fs.writeFile(file, JSON.stringify({ image: url }));
+    await fs.writeFile(path.join(root, 'local-assets.json'), JSON.stringify({ groups: { 'scene/test': { bin: { path: url } } } }));
+    const index = await stageAndroidAssets({ publicDir, manifestFile: file, outputDir });
+    const scene = index.files.find(f => f.url === url);
+    assert.equal(scene.mime, 'application/octet-stream');
+    assert.deepEqual(scene.urlHashes, [crypto.createHash('sha256').update('geometry').digest('hex').slice(0, 16)]);
+    assert.equal(await fs.readFile(path.join(outputDir, 'preinstalled', url.slice(1)), 'utf8'), 'geometry');
+    await fs.writeFile(path.join(root, 'local-assets.json'), JSON.stringify({ missing: '/assets/local/scene/test/lm0.webp' }));
+    await assert.rejects(stageAndroidAssets({ publicDir, manifestFile: file, outputDir }), /Missing 1 static assets/);
+    await fs.rm(path.join(root, 'local-assets.json'));
+    await fs.writeFile(path.join(root, 'local-fx.json'), JSON.stringify({ missing: '/assets/local/fx/tex/missing.webp' }));
+    await assert.rejects(stageAndroidAssets({ publicDir, manifestFile: file, outputDir }), /Missing 1 static assets/);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});

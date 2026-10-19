@@ -33,6 +33,22 @@ ${code}`;
   return JSON.parse(r.stdout);
 }
 
+test('Windows scene dependencies include built-in Unity meshes outside the AB directory', { skip: !PY && 'no python3' }, () => {
+  const out = py(`import tempfile
+from pathlib import Path
+with tempfile.TemporaryDirectory() as td:
+    data = Path(td) / 'Arknights_Data'
+    ab = data / 'StreamingAssets' / 'AB' / 'Windows'
+    ab.mkdir(parents=True)
+    resources = data / 'Resources'
+    resources.mkdir()
+    for name in ('unity default resources', 'unity_builtin_extra'):
+        (resources / name).write_bytes(b'resource')
+    print(json.dumps({'found': [p.name for p in s.builtin_resources(ab)],
+                      'missing': [str(p) for p in s.builtin_resources(ab / 'other')]}))`);
+  assert.deepEqual(out, { found: ['unity default resources', 'unity_builtin_extra'], missing: [] });
+});
+
 describe('exact scene renderer duplicates (no UnityPy)', { skip: !PY && 'no python3' }, () => {
   test('drops an entire exact loose copy, retaining the base static bake regardless of input order', () => {
     const out = py(`a, b = renderer(), renderer(2, 'HIDDEN@1', False)

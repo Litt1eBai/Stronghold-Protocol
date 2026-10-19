@@ -26,13 +26,16 @@ const manifest = {
 // what the server (server/http/static.js) serves when data/local-assets.json is absent
 const EMPTY_LOCAL = { version: 1, source: 'none', count: 0, groups: {} };
 
-let mode = 'ok';         // data/local-assets.json: 'ok' (the manifest above) | 'empty' (the server's stand-in) | 'missing' (404)
+let mode = 'ok';         // local manifest fixture, empty, scene-only, installed, or missing (404)
 let assetsDoc = null;    // data/assets.json, or null (404)
 globalThis.fetch = async (url) => {
   const u = String(url);
   if (u.endsWith('/local-assets.json')) {
     if (mode === 'ok') return { ok: true, status: 200, json: async () => manifest };
     if (mode === 'empty') return { ok: true, status: 200, json: async () => EMPTY_LOCAL };
+    if (mode === 'scenes') return { ok: true, status: 200, json: async () => ({ version: 1,
+      groups: { 'scene/act1autochess_m01': { bin: { path: '/assets/local/scene/act1autochess_m01/scene.bin' } } } }) };
+    if (mode === 'installed') return { ok: true, status: 200, json: async () => JSON.parse(safeRead()) };
   } else if (u.endsWith('/assets.json') && assetsDoc) return { ok: true, status: 200, json: async () => assetsDoc };
   return { ok: false, status: 404, json: async () => ({}) };
 };
@@ -79,14 +82,28 @@ describe('local-client art fallbacks', () => {
     assert.equal(tierChipUrl(1), null);
   });
 
-  test('the real manifest (when extracted) lists all 36 emotes and all 19 guide pages', { skip: !safeRead() && 'no data/local-assets.json' }, () => {
+  test('the real installation resolves all 36 emotes and all 19 pages with partial or full local art', { skip: !safeRead() && 'no data/local-assets.json' }, async () => {
     const real = JSON.parse(safeRead());
+    mode = 'installed';
+    assetsDoc = JSON.parse(readFileSync(path.join(ROOT, 'data/assets.json'), 'utf8'));
+    const { data } = await import('../../public/js/data.js');
+    await reload(data);
+    const { emoteArtUrl } = await import('../../public/js/ui/emotes.js');
+    const { guidePages } = await import('../../public/js/ui/guide.js');
     for (const id of EMOTES) {
       const entry = real.groups[emoteArtGroup(id)]?.[emoteInfo(id).picId];
-      assert.ok(entry, `emote ${id}`);
-      assert.equal(entry.path, emoteArtPath(id));
+      if (entry) assert.equal(entry.path, emoteArtPath(id));
+      const expected = entry?.path || assetsDoc.ui[`${emoteArtGroup(id)}/${emoteInfo(id).picId}`];
+      assert.ok(expected, `emote ${id}`);
+      assert.equal(emoteArtUrl(id), expected);
     }
-    assert.equal(Object.keys(real.groups.guide || {}).length, 19);
+    const pages = guidePages();
+    assert.deepEqual(pages.map(p => p.key), GUIDE_PAGES);
+    for (const page of pages) {
+      const expected = real.groups.guide?.[page.key]?.path || assetsDoc.ui[`guide/${page.key}`];
+      assert.ok(expected, `guide ${page.key}`);
+      assert.equal(page.url, expected);
+    }
   });
 });
 
@@ -129,8 +146,8 @@ describe('emotes and 玩法说明 pages: local art first, then the mirror copy (
     assert.equal(nextArtUrl(null), null);
   });
 
-  test('no local client (a source deploy on a server, issue #42): every emote and all 19 pages come from the committed data/assets.json', async () => {
-    mode = 'empty';
+  for (const localMode of ['empty', 'scenes']) test(`${localMode} local art: every emote and all 19 pages come from the committed data/assets.json`, async () => {
+    mode = localMode;
     assetsDoc = JSON.parse(readFileSync(path.join(ROOT, 'data/assets.json'), 'utf8'));
     const { data } = await import('../../public/js/data.js');
     await reload(data);

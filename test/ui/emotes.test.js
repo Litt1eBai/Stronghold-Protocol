@@ -210,23 +210,30 @@ print(json.dumps({
   });
 
   const manifest = tryJson('data/local-assets.json');
-  test('the extracted manifest lists all 36 pictures under their picId', { skip: !manifest && 'no data/local-assets.json' }, () => {
+  test('each extracted emote theme lists its pictures under their picId; other local art may be extracted alone', { skip: !manifest && 'no data/local-assets.json' }, () => {
     for (const e of EMOTE_CATALOG) {
-      const entry = manifest.groups[emoteArtGroup(e.id)]?.[e.picId];
+      const group = manifest.groups[emoteArtGroup(e.id)];
+      if (!group) continue; // A scene-only or another --only extraction has no emote override.
+      const entry = group[e.picId];
       assert.ok(entry, `${e.id} → ${e.picId}`);
       assert.equal(entry.path, emoteArtPath(e.id));
       assert.ok(entry.w >= 64 && entry.h >= 64 && entry.w <= 160 && entry.h <= 160, `${e.picId} ${entry.w}×${entry.h}`);
       assert.equal(entry.kind, 'Sprite');
     }
     for (const t of EMOTE_THEMES) {
-      const names = Object.keys(manifest.groups[`emoticon/${t.dir}`]);
+      const group = manifest.groups[`emoticon/${t.dir}`];
+      if (!group) continue;
+      const names = Object.keys(group);
       assert.deepEqual(names.sort(), t.emotes.map((e) => e.picId).sort(), `${t.dir}: only the battle sprites`);
     }
-    for (const n of ['emoji_bubble_bkg', 'emoji_bkg', 'emoji_cell_bkg', 'emoji_btn', 'emoji_btn_disable']) assert.ok(manifest.groups['ui/battle']?.[n], n);
+    if (manifest.groups['ui/battle']) {
+      for (const n of ['emoji_bubble_bkg', 'emoji_bkg', 'emoji_cell_bkg', 'emoji_btn', 'emoji_btn_disable']) assert.ok(manifest.groups['ui/battle'][n], n);
+    }
   });
 
   test('the listed pictures exist on disk', { skip: (!manifest || !existsSync(path.join(ROOT, 'public/assets/local/emoticon'))) && 'no extracted art' }, () => {
     for (const e of EMOTE_CATALOG) {
+      if (!manifest.groups[emoteArtGroup(e.id)]?.[e.picId]) continue;
       const file = path.join(ROOT, 'public', emoteArtPath(e.id));
       assert.ok(existsSync(file), file);
       const png = readFileSync(file);

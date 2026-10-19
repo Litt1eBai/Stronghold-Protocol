@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { rewriteManifest } from '../server/http/assetViews.js';
 import { hash16 } from '../server/http/assetIndex.js';
+import { checkSceneAssets } from './scene-assets.mjs';
 
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
   gif: 'image/gif', svg: 'image/svg+xml', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
@@ -13,6 +14,12 @@ const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'i
 
 export async function stageAndroidAssets({ publicDir, manifestFile, outputDir }) {
   const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8'));
+  const manifests = [['assets.json', manifest]];
+  for (const name of ['local-assets.json', 'local-fx.json']) {
+    try {
+      manifests.push([name, JSON.parse(await fs.readFile(path.join(path.dirname(manifestFile), name), 'utf8'))]);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   const required = new Set();
   function collect(value) {
     if (typeof value === 'string' && /^\/(assets|fonts)\//.test(value)) {
@@ -21,7 +28,7 @@ export async function stageAndroidAssets({ publicDir, manifestFile, outputDir })
       for (const entry of Object.values(value)) collect(entry);
     }
   }
-  collect(manifest);
+  for (const [, doc] of manifests) collect(doc);
   if (!required.size) throw new Error('Static asset manifest contains no asset/font references');
 
   const files = [];
@@ -63,12 +70,6 @@ export async function stageAndroidAssets({ publicDir, manifestFile, outputDir })
       return hashes.every(Boolean) ? hash16(hashes.join('\n')) : null;
     },
   };
-  const manifests = [['assets.json', manifest]];
-  for (const name of ['local-assets.json', 'local-fx.json']) {
-    try {
-      manifests.push([name, JSON.parse(await fs.readFile(path.join(path.dirname(manifestFile), name), 'utf8'))]);
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  }
   for (const [name, doc] of manifests) {
     for (const rels of rewriteManifest(doc, name, hashIndex).models) {
       const hash = hashIndex.modelHash(rels);
@@ -83,6 +84,8 @@ export async function stageAndroidAssets({ publicDir, manifestFile, outputDir })
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const scenes = await checkSceneAssets(root);
+  console.log(`[android] verified ${scenes.stages} preinstalled battlefield scenes`);
   const index = await stageAndroidAssets({ publicDir: path.join(root, 'public'),
     manifestFile: path.join(root, 'data/assets.json'),
     outputDir: path.join(root, 'client/android/app/build/generated/preinstalled-assets') });

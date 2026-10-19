@@ -30,7 +30,7 @@ allow_branches:
 `DEPLOY_KNOWN_HOSTS` 使用已核验的 SSH 主机公钥，流水线开启严格主机校验。
 迁移后的服务器保持原主机密钥；`DEPLOY_HOST_KEY_ALIAS=[203.135.99.28]:30080` 沿用密钥仓库中原地址的已核验记录，实际连接新地址。
 本机生成的私有配置位于 `.cache/cnb-release/android.yml` 和 `.cache/cnb-release/deploy.yml`，仅用于复制到密钥仓库。
-签名和部署变量分别只导入相应脚本步骤。
+签名变量只导入签名步骤；部署 SSH 变量用于读取私有场景构建输入和部署两个步骤。
 
 仓库的 Release APK 必须可以匿名下载。流水线在部署前检查公开下载地址、长度和 ZIP 文件头；
 登录页面、私有下载或 HTTP 地址会让发布失败。应用在安装前继续核验完整 SHA-256、包名、版本号和签名证书。
@@ -66,7 +66,7 @@ git push cnb android-v0.3.0-1025
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
 不要在旧源码上创建标签。流水线会拒绝与 Android 版本不匹配的标签。
 
-流水线先下载素材和皮肤，再验证代码和 golden，然后构建、签名并上传 APK。
+流水线先恢复官方棋盘与 11 个战场场景，再下载其他素材和皮肤，验证代码和 golden，然后构建、签名并上传 APK。
 APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.3.0-1025.apk`，方便区分下载目录中的旧包。
 签名后从实际 APK 的 Manifest 核对包名、版本名、版本编号和最低 Android 版本；不一致时停止发布。
 `prepare-release-assets.mjs` 保留下载器的清单缩减保护和必需素材检查，并验证下载前后两份发布清单的全部文件引用。
@@ -76,6 +76,36 @@ APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.3.0-10
 内部和公网健康检查必须与新包的应用版本、构建指纹一致，公网更新公告也必须一致。
 本次游戏入口 IP 变更，旧 APK 绑定旧地址，需要手动覆盖安装新 APK 一次；之后从新地址检查更新。
 全部成功后将 CNB Release 标记为 latest。首次支持更新的 APK 仍需手动安装；以后应用提示下载并交给系统确认安装。
+
+## 官方场景构建输入与安卓预装
+
+场景使用本机官方客户端材质和归档赛季场景包提取，原始和提取后的美术均不进 Git。
+本机客户端路径为 `E:\Games\Hypergryph Launcher\games\Arknights\Arknights_Data\StreamingAssets\AB\Windows`；
+WSL 使用相应的 `/mnt/e/` 路径。Windows 客户端的 `Arknights_Data/Resources` 也参与提取，解析场景引用的 Unity 内置模型。
+只补棋盘与场景时，在已安装提取依赖的环境中运行：
+
+```bash
+python3 tools/local-extract/fetch_scenes.py
+.venv-extract/bin/python tools/local-extract/extract.py --game '<客户端 AB/Windows>' --only map --only mesh --only scene
+node tools/crop-board-atlas.mjs
+node tools/scene-assets.mjs check
+node tools/scene-assets.mjs pack .cache/scene-assets/official-board-scenes.zip
+```
+
+`pack` 只收录 `map/`、`mesh/`、`scene/` 素材与这些分组的清单，输出 SHA-256、大小和提取版本。
+将 ZIP 保存到部署服务器的 `/var/lib/stronghold-protocol/build-assets/`，该目录位于版本目录之外，仅通过部署 SSH 读取。
+在 `.cnb/scene-assets.json` 固定 `format: 1`、`remotePath`、`sha256` 和 `size`；更换素材时同时更新文件与固定值。
+要恢复同一份素材到本机，可运行 `node tools/scene-assets.mjs restore <ZIP>`。
+
+`scripts/cnb-prepare-scenes.sh` 优先复用已校验的 `.cache/scene-assets/<sha256>.zip`，冷缓存时从服务器读取。
+恢复前校验整个归档，并检查全部 11 张场景、棋盘、几何、光照和材质贴图；失败停止发布。
+恢复会合并本地素材清单，保留其他 UI、角色及独立的官方特效清单。
+服务器不可用且 CNB 没有缓存时，发布无法继续，已有线上服务不受影响。请同时备份该构建输入。
+
+原生安卓打包前也会校验场景，并把模型、贴图、光照和棋盘文件放入 APK 的 `assets/preinstalled/`。
+客户端请求与清单哈希一致时从 APK 读取，无需进入每张地图后再向服务器下载；变化后的文件仍从服务器加载。
+服务端发布包携带同一批素材和清单，使浏览器和安卓使用一致的场景。
+旧 APK 不会因为服务器补素材而自动变成预装包；需安装下一次构建的新 APK 才能得到这批预装文件。
 
 ## 部署失败和回退
 

@@ -295,6 +295,10 @@ containing the plugin JSON and roster; `--only plugin-art/<charId>` narrows the 
 
 ### Re-extracting scenes after an update
 
+The Windows extractor also reads `Arknights_Data/Resources/unity default resources` and
+`unity_builtin_extra` when present. These contain built-in meshes (including Quad #10210) that archived
+scene bundles reference outside `StreamingAssets/AB/Windows`; leaving them out skips those renderers.
+
 Scene extraction version **4** removes complete, exact redundant renderers (GitHub #684, DESIGN §34.24).
 The official Android `26-04-13-12-31-42_e9b560` m03 scene contains both a base rock (renderer 2048) and its
 `HIDDEN@1` copy (2193); static batching gives the base a different mesh buffer and lightmap UVs. **[ASSUMED]**

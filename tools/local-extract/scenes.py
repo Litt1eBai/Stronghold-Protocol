@@ -367,6 +367,15 @@ def hidden_groups(raw, objects):
     return out
 
 
+def builtin_resources(ab_root):
+    """Windows scene bundles can reference Unity's built-in meshes outside StreamingAssets (e.g. Quad #10210)."""
+    root = Path(ab_root).resolve()
+    if root.name != 'Windows' or len(root.parents) < 3:
+        return []
+    resources = root.parents[2] / 'Resources'
+    return [p for name in ('unity default resources', 'unity_builtin_extra') if (p := resources / name).is_file()]
+
+
 def export_scene(stage_id, deps, scene_path, ab_root, out_root, manifest, log, material_info, shader_deps=()):
     """Write one stage's scene (see the module docstring). Returns the number of files written (0 on failure)."""
     import aklz4  # noqa: F401  (registers the LZ4AK decoder)
@@ -382,7 +391,7 @@ def export_scene(stage_id, deps, scene_path, ab_root, out_root, manifest, log, m
     objects = {o.path_id: o for o in env.objects}
     scene_objs = list(objects.values())
     light_bundle = scene_path.with_suffix('') / 'lightingdata.ab'
-    extra = [light_bundle] if light_bundle.is_file() else []
+    extra = [*builtin_resources(ab_root), *([light_bundle] if light_bundle.is_file() else [])]
     for dep in [*(Path(ab_root) / d for d in [*deps, *COMMON_DEPS]), *shader_deps]:
         if Path(dep).is_file():
             extra.append(Path(dep))

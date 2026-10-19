@@ -12,6 +12,12 @@ registration, login, account tokens and server-side account progress.
   game data follow server deployments. Art, animation, audio and fonts are preinstalled
   from `public/assets/` and `public/fonts/`; the APK does not embed a local Node server.
 
+Android builds require the official board and all eleven battlefield scenes. Prepare them using
+[the scene build-input workflow](../docs/CNB-RELEASE.md#官方场景构建输入与安卓预装).
+Geometry, textures and lighting are installed with the APK and served locally when their hashes match
+the server manifest. The staging step validates references from the base, local-art and effects manifests;
+an incomplete scene set stops the build. Existing APKs need a new installation to gain preinstalled scenes.
+
 ## Build on Windows
 
 Run from the repository root:

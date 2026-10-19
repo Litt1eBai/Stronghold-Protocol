@@ -50,6 +50,10 @@ master:
           script: npm ci --no-audit --no-fund
         - name: Verify release identity
           script: node tools/cnb-release.mjs identity
+        - name: Restore official board and battlefield scenes
+          imports:
+            - https://cnb.cool/littlebai/secrets/-/blob/main/deploy.yml
+          script: bash scripts/cnb-prepare-scenes.sh
         - name: Prepare required art and skins
           script: node tools/prepare-release-assets.mjs
         - name: Verify code
