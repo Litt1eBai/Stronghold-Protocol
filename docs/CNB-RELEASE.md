@@ -56,18 +56,18 @@ SSH 连接和握手最多等待 15 秒；连接后定期检测服务端响应，
 
 1. 修改 `client/android/app/build.gradle.kts` 的 `versionName` 和递增的 `versionCode`；每次原生发布都必须增加编号。
 2. 在 `.cnb/release-notes.txt` 只填写本版本的用户可见变更；不要放发布标签、部署步骤或签名说明。提交代码并同步到 CNB。
-3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.3.0-1025`，推送到 CNB：
+3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.3.2-dev-1028`，推送到 CNB：
 
 ```bash
-git tag android-v0.3.0-1025
-git push cnb android-v0.3.0-1025
+git tag android-v0.3.2-dev-1028
+git push cnb android-v0.3.2-dev-1028
 ```
 
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
 不要在旧源码上创建标签。流水线会拒绝与 Android 版本不匹配的标签。
 
 流水线先恢复官方棋盘与 11 个战场场景，再下载其他素材和皮肤，验证代码和 golden，然后构建、签名并上传 APK。
-APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.3.0-1025.apk`，方便区分下载目录中的旧包。
+APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.3.2-dev-1028.apk`，方便区分下载目录中的旧包。
 签名后从实际 APK 的 Manifest 核对包名、版本名、版本编号和最低 Android 版本；不一致时停止发布。
 `prepare-release-assets.mjs` 保留下载器的清单缩减保护和必需素材检查，并验证下载前后两份发布清单的全部文件引用。
 最新上游索引额外计划下载、但发布清单没有引用的资源，可以报告缺失；发布清单已引用的文件缺失、为空或为符号链接时必须失败。

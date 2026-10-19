@@ -2,6 +2,7 @@ import { getRoomDanmaku } from './roomDanmaku.js';
 import { outlineIcon } from './voiceIcons.js';
 import { net } from '../net.js';
 import { store } from '../store.js';
+import { PHASE } from '../../../shared/constants.js';
 import { t, onLangChange } from '../../../shared/i18n.js';
 
 export function mountRoomChat() {
@@ -59,7 +60,7 @@ export function mountRoomChat() {
   let identity = null, expanded = true, pending = false;
   let composing = false, unread = 0, desired = null, position = null;
   let dragging = null, alive = true;
-  let historyRequest = null;
+  let historyRequest = null, previousPhase = null;
   const received = new Map();
   const cleanup = [];
 
@@ -149,6 +150,9 @@ export function mountRoomChat() {
 
   function sync() {
     const state = store.get();
+    const phase = state.match.public?.phase;
+    const enteredDraft = phase === PHASE.BAND_DRAFT && previousPhase !== phase;
+    previousPhase = phase;
     const room = state.room;
     const playerId = state.me?.playerId;
     const seat = room?.seats?.find(s => s?.playerId === playerId);
@@ -157,7 +161,12 @@ export function mountRoomChat() {
     const next = state.session?.entered && room?.mode === 'coop' && playerId && member
       ? { code: room.code, playerId } : null;
 
-    if (next?.code === identity?.code && next?.playerId === identity?.playerId) return;
+    if (next?.code === identity?.code && next?.playerId === identity?.playerId) {
+      // The chat panel otherwise covers the strategy order and match-info button on phones.
+      // Collapse once on entry; the player may reopen it during the draft.
+      if (enteredDraft) open(false);
+      return;
+    }
     identity = next;
     root.hidden = !next;
     received.clear();
@@ -169,7 +178,7 @@ export function mountRoomChat() {
     dragging = null;
     title.textContent = next ? t('同盟通讯 · {code}', { code: next.code }) : t('同盟通讯');
     controls();
-    open(true);
+    open(phase !== PHASE.BAND_DRAFT);
     requestHistory();
   }
 

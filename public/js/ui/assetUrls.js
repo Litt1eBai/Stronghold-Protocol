@@ -6,6 +6,15 @@
 const str = (v) => (typeof v === 'string' && v ? v : null);
 const obj = (v) => (v && typeof v === 'object' ? v : null);
 
+/** Skin pictures belong to the effective operator, never the original chess of a stand-in / DIY slot. */
+function skinPicture(m, chess, skinId, field) {
+  if (!skinId) return null;
+  const id = chess?.charId || str(chess?.assets?.[field])?.replace(/_[12]$/, '');
+  const skin = m?.chars?.[id]?.skins?.[skinId];
+  const elite = chess?.isGolden || /_2$/.test(chess?.assets?.[field] || '');
+  return str(elite && skin?.[`${field}E2`]) || str(skin?.[field]) || (field === 'portrait' ? str(skin?.illust) : null);
+}
+
 /** @param {any} m manifest @param {string} key 'group/key' */
 export function uiUrl(m, key) {
   return str(obj(obj(m)?.ui)?.[key]);
@@ -17,11 +26,12 @@ export function uiUrl(m, key) {
  * @param {any} chess chess.json record (or { assets: { avatar } })
  */
 export function chessAvatarUrl(m, chess, opts) {
+  const skin = opts && Object.hasOwn(opts, 'skin') ? opts.skin : chess?.skin;
+  const picture = skinPicture(m, chess, skin, 'avatar');
+  if (picture) return picture;
   const chars = obj(obj(m)?.chars);
   const id = str(chess?.assets?.avatar) || str(chess?.charId);
   if (!chars || !id) return null;
-  const skinArt = chars[chess?.charId]?.skins?.[opts?.skin || chess?.skin]?.avatar;
-  if (skinArt) return str(skinArt);
   if (id.endsWith('_2') && !chars[id]) {
     const base = chars[id.slice(0, -2)];
     return str(base?.avatarE2) || str(base?.avatar);
@@ -38,14 +48,15 @@ export function chessAvatarUrl(m, chess, opts) {
  * Half-body portrait (180×360) for a chess record (golden → E2 portrait when present).
  * @param {any} m
  * @param {any} chess
- * @param {{ skin?: string }} [opts] Installed skin art takes precedence, with its avatar as a fallback.
+ * @param {{ skin?: string }} [opts] Installed skin art takes precedence; an explicit null uses the default appearance.
  */
 export function chessPortraitUrl(m, chess, opts) {
+  const skin = opts && Object.hasOwn(opts, 'skin') ? opts.skin : chess?.skin;
+  const picture = skinPicture(m, chess, skin, 'portrait');
+  if (picture) return picture;
   const chars = obj(obj(m)?.chars);
   const id = str(chess?.assets?.portrait);
   if (!chars) return null;
-  const skinArt = chars[chess?.charId]?.skins?.[opts?.skin || chess?.skin];
-  if (skinArt) return str(skinArt.portrait) || str(skinArt.avatar);
   if (id) {
     // A golden piece whose portrait id is the character key uses portraitE2 when the entry has one.
     // An entry with only `portrait` (a custom golden URL included) keeps that URL. Official ids are
