@@ -15,12 +15,12 @@ test('room portraits synchronize, survive reconnect and stay out of match inputs
   const ok = async (c, msg) => assert.equal((await c.request(msg)).t, 'ok');
   try {
     const host = await connect('Host'), guest = await connect('Guest'), observer = await connect('Observer');
-    assert.equal((await host.request({ t: 'room.card', charId: 'char_498_inside' })).code, 'NOT_IN_ROOM');
+    await ok(host, { t: 'room.card', charId: 'char_498_inside' }); // upstream keeps the preference before joining
     await ok(host, { t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
     const { code } = await host.waitFor('room.state');
     await ok(guest, { t: 'room.join', code });
     await ok(observer, { t: 'room.spectate', code });
-    assert.equal((await observer.request({ t: 'room.card', charId: 'char_498_inside' })).code, 'NOT_IN_ROOM');
+    await ok(observer, { t: 'room.card', charId: 'char_498_inside' }); // cosmetic preference, including spectators
     assert.equal((await host.request({ t: 'room.card', charId: 'char_unknown' })).code, 'BAD_MSG');
     for (const charId of ['../secret', '<svg>', 'x'.repeat(65), null]) assert.ok(validateC2S({ t: 'room.card', charId }));
     // The picker lists the room's content set, so setCard must check that data, not the server's vanilla chess table.

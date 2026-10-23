@@ -6,7 +6,7 @@ import { t } from '../../../shared/i18n.js';
 /** The hub's top-right chip: avatar initial + name; a click opens 统计数据. */
 export function AccountMeChip({ player, onStats }) {
   const name = player?.name || t('博士');
-  return html`<button type="button" class="me-chip me-chip--btn stats-entry" onClick=${onStats} title=${t('统计数据')} aria-label=${t('统计数据')}>
+  return html`<button type="button" class="me-chip me-chip--btn account-entry" onClick=${onStats} title=${t('统计数据')} aria-label=${t('统计数据')}>
     <${AvatarFrame} size="sm" name=${name} seat=${0} self=${true} />
     <span class="me-chip__text"><span class="me-chip__name">${name}</span><${MicroLabel}>STATS<//></span>
   </button>`;

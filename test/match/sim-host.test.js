@@ -109,18 +109,21 @@ test('script operator: permission child and Worker have byte-identical ev/result
 test('runner: true infinite script and slow data step terminate, stop reports and request server takeover', { timeout: 15000 }, async t => {
   for (const scripts of [true, false]) {
     const set = { ...fixtureSet(), ...(scripts ? makeScriptSet('export default function(){while(true){}}') : { data: { ...fixtureSet().data, __slow: true } }) };
-    const sent = [], toasts = [];
+    const sent = [], toasts = [], failures = [];
     const runner = createBattleRunner({ net: { on: () => () => {}, request: (kind, fields) => {
       assert.equal(validateC2S({ t: kind, rid: 1, ...fields }), null); sent.push({ kind, ...fields }); return Promise.resolve();
     } }, store: createStore(initialState), contentFor: async () => set, simContent: () => set, vanillaCs: () => 'b'.repeat(64),
-    createHost: (_, onFailure) => remote({ onFailure }), raf: () => 1, caf: () => {}, setInterval: () => 1, clearInterval: () => {},
+    createHost: (_, onFailure) => remote({ onFailure: error => { failures.push({ code: error.code, message: error.message }); onFailure(error); } }), raf: () => 1, caf: () => {}, setInterval: () => 1, clearInterval: () => {},
     toast: text => toasts.push(text), now: () => Date.now(), doc: null });
     t.after(() => runner.dispose());
     let alive = 0; const pulse = setInterval(() => alive++, 30);
-    const start = Date.now();
+    const start = performance.now();
     await runner.onStart({ battleId: 'hang', fieldId: 'n:p1', authoritative: true, spec: { ...fixtureSpec(), cs: set.cs }, elapsed: scripts ? 0 : 3 });
     clearInterval(pulse);
-    assert.ok(alive > 25, 'parent remains responsive'); assert.ok(Date.now() - start >= 1900);
+    t.diagnostic(JSON.stringify({ scripts, elapsed: performance.now() - start, failures }));
+    assert.ok(alive > 25, 'parent remains responsive'); assert.ok(performance.now() - start >= 1900, 'the watchdog uses monotonic elapsed time');
+    assert.ok(failures.every(error => error.code === 'PLUGIN_WORKER_TIMEOUT'));
+    assert.ok(failures.length > 0);
     assert.equal(toasts.length, 1); assert.equal(sent.length, 1); assert.equal(sent[0].cs, undefined);
     assert.equal(runner.state(), null);
   }

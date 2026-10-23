@@ -42,14 +42,10 @@ describe('a room\'s content set in the browser (P1c)', { skip: !ENABLED && 'set 
     try {
       await host.open();
       await host.enter('凯尔希');
-      await host.click('.hub-entry', '同盟模拟');
-      await host.click('.ally-card--create');
-      await host.click('.pcard', '标准模拟');
-      await host.click('.proto-start');
-      const code = (await host.waitFor((s) => !!s.room?.code, 'room created')).room.code;
+      const { code } = await host.createCoop();
       await guest.open();
       await guest.enter('阿米娅');
-      await guest.click('.hub-tile', '密钥加入');
+      await guest.click('.mode-card', '同盟模拟');
       await guest.click('.join-row input');
       await guest.page.keyboard.type(code);
       await guest.click('.join-row button', '加入同盟');

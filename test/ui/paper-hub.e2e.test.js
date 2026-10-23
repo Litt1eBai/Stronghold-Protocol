@@ -14,7 +14,8 @@ test('paper hub on desktop and touch: local backdrop, reports, quick skins, port
     const { AuthStore } = await import('../../server/auth.js');
     const puppeteer = (await import('puppeteer-core')).default;
     const temp = mkdtempSync(join(tmpdir(), 'sp-hub-browser-'));
-    const image = join(temp, 'backdrop.png'); writeFileSync(image, png(64, 32));
+    const imageBytes = png(64, 32);
+    const image = join(temp, 'backdrop.png'); writeFileSync(image, imageBytes);
     const srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, auth: new AuthStore({ required: false }) });
     const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
     mkdirSync('test/e2e/out', { recursive: true });
@@ -33,14 +34,35 @@ test('paper hub on desktop and touch: local backdrop, reports, quick skins, port
     try {
       for (const viewport of [{ width: 1600, height: 900 }, { width: 844, height: 390, isMobile: true, hasTouch: true }]) {
         const page = await newPage(viewport);
-        await page.click('.hub-bg-btn');
-        await page.waitForSelector('.bgset', { visible: true });
-        await page.click('.bgset__theme:nth-child(2)');
-        await page.waitForFunction(() => document.querySelector('.lobby-screen')?.dataset.hubTheme === 'frost');
-        const input = await page.$('.bgset input[type=file]'); await input.uploadFile(image);
-        await page.waitForSelector('.hub-bg[data-scene="photo"]');
+        // The earlier local picture database must migrate without losing the original blob.
+        await page.evaluate(async encoded => {
+          localStorage.removeItem('sp.pref.lobby.media');
+          localStorage.setItem('sp.pref.hub.backdrop', JSON.stringify({ theme: 'custom', dim: 45 }));
+          const db = await new Promise((resolve, reject) => {
+            const req = indexedDB.open('sp-hub-backdrop', 1);
+            req.onupgradeneeded = () => req.result.createObjectStore('kv');
+            req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+          });
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').put(new Blob([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], { type: 'image/png' }), 'image');
+            tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+          });
+          db.close();
+        }, imageBytes.toString('base64'));
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.waitForSelector('.hub-bg[data-scene="photo"]');
+        await page.waitForSelector('[data-testid="own-backdrop"] img');
+        const migrated = await page.evaluate(() => JSON.parse(localStorage.getItem('sp.pref.lobby.media')));
+        assert.equal(migrated.backdrop, true);
+        assert.equal(migrated.dim, 0.45);
+        await page.click('[data-testid="lobby-media"]');
+        await page.waitForSelector('.lmedia', { visible: true });
+        await page.click('.bgset__theme[data-scene="frost"]');
+        await page.waitForFunction(() => !!document.querySelector('[data-hub-theme="frost"]'));
+        const input = await page.$('[data-testid="media-backdrop-file"]'); await input.uploadFile(image);
+        await page.waitForSelector('[data-testid="own-backdrop"]');
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-testid="own-backdrop"]');
         await page.screenshot({ path: `test/e2e/out/paper-hub-${viewport.width}.png` });
         await page.click('.hub-plate--sweep');
         await page.waitForSelector('.sw-tab');
@@ -48,6 +70,7 @@ test('paper hub on desktop and touch: local backdrop, reports, quick skins, port
         for (const tab of tabs) { await tab.click(); await page.waitForFunction(() => !!document.querySelector('.sw-right')?.textContent.trim()); }
         await page.click('.sw-top .sw-back');
         await page.waitForFunction(() => !document.querySelector('.sw'));
+        await page.evaluate(() => localStorage.setItem('sp.pref.loadout.view', JSON.stringify('deck')));
         await page.click('[data-testid="loadout-open"]');
         await page.waitForSelector('.lo-op[data-chess="chess_char_1_01_a"]');
         await page.click('[data-testid="loadout-quick"]');
@@ -63,20 +86,21 @@ test('paper hub on desktop and touch: local backdrop, reports, quick skins, port
         await page.click('.hub-entry-wrap:nth-child(2) .hub-entry');
         await page.waitForSelector('.ally-card--create', { visible: true });
         await page.click('.ally-card--create');
-        await page.waitForSelector('.proto-start', { visible: true });
-        await new Promise(resolve => setTimeout(resolve, 350)); // let the protocol-screen entrance finish
-        assert.equal(await page.$('.firepower-variants'), null);
-        await page.click('.proto-start');
         await page.waitForSelector('.rseat.is-me .rseat__pick', { visible: true });
         const code = await page.evaluate(() => window.__SP__.store.get().room.code);
         const guest = await newPage(viewport);
         await guest.evaluate(code => window.__SP__.net.request('room.join', { code }), code);
         await guest.waitForSelector('.room-settings', { visible: true });
+        // Floating chat can cover a card; fold it while choosing the portrait.
+        await page.click('.spchat__fold');
+        await guest.click('.spchat__fold');
         await page.click('.rseat.is-me .rseat__pick');
         await page.waitForSelector('.cardpick__search input');
         await page.type('.cardpick__search input', '隐现');
         await page.click('.cardpick__op:not(.cardpick__op--auto)');
         await guest.waitForFunction(() => window.__SP__.store.get().room.seats.some(s => s?.card === 'char_498_inside'));
+        await page.click('.spchat__toggle');
+        await guest.click('.spchat__toggle');
         await page.waitForSelector('.spchat__input', { visible: true });
         const text = '<img src=x onerror=alert(1)>';
         await page.type('.spchat__input', text);

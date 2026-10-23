@@ -38,6 +38,7 @@ test('required account: bad password stays on login, password login and saved JW
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.lobby-settings', { visible: true });
       assert.equal(await page.evaluate(() => window.__SP__.store.get().me.account.username), 'doctor');
+      await page.evaluate(() => localStorage.setItem('sp.pref.loadout.view', JSON.stringify('deck')));
       await page.click('[data-testid="loadout-open"]');
       await page.waitForSelector('[data-testid="loadout-ownership"]');
       assert.ok(await page.$('[data-diy-tier="5"]'));

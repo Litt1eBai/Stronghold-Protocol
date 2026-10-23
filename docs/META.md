@@ -184,7 +184,10 @@ A `choice:<effectId>` registry handler overrides the default application (§2.4)
   the deadline (an open 教鞭 choice is picked at random first, §2.5; then the temp pieces due at that prep are sold/destroyed). Nothing is bought for them. A battle the human was authority of goes to the server
   (normal / 联防: re-simulated from t = 0) or, on a boss field, to the partner's replica (DESIGN §14). The session stays
   resumable for 10 min (net.js `reconnectWindowMs`); a **solo** run's for the official `constants.singleReconnectTime`
-  (86 400 s = 24 h, lobby.js `soloResumeWindowMs`) — nothing in a solo run is timed, so it simply waits. `onReconnect`
+  (86 400 s = 24 h, lobby.js `soloResumeWindowMs`) when the data has it, else that same 24 h fallback. 第一期's constData
+  has no `singleReconnectTime`, so its window is the fallback: a carried-over convenience [ASSUMED], not official 第一期
+  data, and not because the run is untimed (a 第一期 solo is timed unless the room's 「不限时」 is on, DESIGN §35.23.10).
+  `onReconnect`
   resends `m.public`, `m.private` and the `b.start` of the field the player is on / watching.
 * `g.autoplay { on }` ("AI 托管"): the bot plays the seat (drafts, buying, placement, an open 教鞭 choice, ready) until turned off.
 * `onLeave` (quit / reconnect window expired): 中途退出 counts as elimination (research 00-INDEX §3, 01 §9, 06 §7 /
@@ -339,6 +342,54 @@ details: DESIGN §14 ([design/network.md](design/network.md)).
 
 ---
 
+### 1.6 Selectable AI implementations
+
+`Match({ botStrategy })` resolves a registered ID or a trusted server-side definition object using
+`server/match/botStrategies.js`. The explicit option overrides `SP_BOT_STRATEGY`; the default
+is `legacy`, an adapter referencing the original `bot.js` functions. Its decisions and RNG consumption
+are unchanged. `botStrategyContract.js` provides validated immutable definitions, hook inheritance and pure
+registries; it rejects duplicate IDs and malformed hooks instead of altering other matches' registrations.
+An unset or empty `SP_BOT_STRATEGY` uses the original bot when no explicit option is supplied. `startServer()` validates the environment
+selection before data loading or listening; an invalid ID prevents startup with a diagnostic naming the variable,
+rejected value, available IDs and how to unset it to restore the default.
+The test input journal stores the resolved `botStrategy` ID. Replay uses the recorded ID (older records: `legacy`),
+never the replay host's environment, and preserves `testSlice` counts for prep generators and rehearsal jobs.
+Band draft order is unchanged; selecting an AI implementation grants no seat priority.
+
+Band/common-card/private-bounty picks and both sliced prep stages use the selected object. Prep retains its existing
+iterator, rehearsal/delegation and deadline protocol. A custom hook failing before it creates an iterator still
+enters cleanup. `tools/matchrun.mjs --bot ID` and `tools/botbench.mjs --bot ID` select registered implementations
+explicitly; botbench records the ID and calls its bounty estimator. Its solo band override leaves the real band
+metadata intact. No alternative economy, formation, bond or sub-route policy is introduced.
+
+The operator may select `external` (maintainer decision 2026-10-17 / request 2026-10-19, DESIGN §35.8):
+the optional `decide` handoff sends the existing seat wire views to HTTP(S) or a per-match stdio child and applies
+its human intents via `validateC2S` and the shared `Match._handleSeatIntent` path. Band/card turns, prep and
+plugin offers keep their phase timers. Legacy finishes incomplete/failed decisions, including sliced rehearsal.
+[ASSUMED] Defaults: 1000 ms, 64 intents, 64 KiB reply, three consecutive failures to match-long legacy,
+1000 ms restart backoff; at most half the remaining phase time is spent on external decisions. Journals record
+replies and failures, replay without transport IO, and omit endpoint/command/credentials. See
+[External AI API](EXTERNAL_AI.md) and the [Chinese server-owner guide](EXTERNAL_AI_ZH.md).
+
+The maintainer's 2026-10-19 advisor extension (§35.9) adds `mode: 'plan'`: once per prep round the external
+agent returns bounded preferences and legacy executes its procurement and rehearsal. Band/card/offer replies
+can name a short human-action ID. `aiPlan.js` owns validation/soft weights; `aiDigest.js` names only human-visible
+state, including existing public scouting; `server/ai/knowledge.js` hashes the active static data, language and
+room rules into a cached primer. Default external mode remains direct; knowledge hello is opt-in there and
+on by default for plan. Unknown preferences degrade to ordinary choices, malformed replies to legacy; no new
+economy or placement rule. [ASSUMED] Schema, scores, cache policy, shortcuts and benchmark statistics are in
+[External AI API](EXTERNAL_AI.md). `tools/ai/run-match.mjs` waits for bounded external IO in both benchmark tools;
+`tools/ai/llm-agent.mjs` is an environment-configured, mock-tested compatible chat adapter with no default provider.
+
+Advisor execution (§35.14, maintainer 2026-10-20) applies only when `aiEconomy.economyPlan` is non-null:
+merge completion precedes an affordable level floor, which precedes filling. Exact keep/sell forms, merge-aware
+buy/bond weights, explicit-target freezing, `items.buy`, bounded `freezeSearch` and shared cleanup protection
+are specified in [EXTERNAL_AI](EXTERNAL_AI.md#advisor-mode-and-readable-observations-359). Cleanup compares
+actual bond thresholds through `computeBonds`; successful purchases track UIDs for this prep only. These are
+[ASSUMED] executor choices; ordinary PlayerState handlers and official economy/hand/merge rules are unchanged.
+
+See [Adding an AI strategy](BOT_STRATEGIES.md) for signatures, examples, state ownership and the validation workflow.
+
 ## 2. Effect registry (content API)
 
 ```js
@@ -371,6 +422,15 @@ the engine built-ins, so content always wins). Sugar: `registry.band(id, h)`, `.
 
 `itemKey` = item id without `_a`/`_b` (`chess_item_1_03_e`); Arts have no suffix (`chess_item_6_02_m`).
 Normal and golden share the key: read `ctx.gd.item(ctx.source.piece.id).params` (or `ev.item`) for the numbers.
+The official item handlers of the content (`server/sim/content/items/meta.js`; official versions M0, 0.3.2, DESIGN §35.22) are
+declared in its `OVERRIDES` table by the normal record's `effectId` (`eff_acarm075` 寻呼模块, `eff_acchal` 教鞭 …), the buff
+key each one reads and the item's default key. The default data and the plugin content sets built on it bind the default
+key, as before. Another official version gives these ids to other items (in 第一期, 盟约·上半, `chess_item_4_01_e` is 催泪瓦斯 and
+寻呼模块 is `chess_item_5_03_e`): on its build (`config.version`) an override binds the item keys whose normal record
+carries its effectId and its buff, so an effect the data does not have, or has with another mechanic (上半's 寻呼模块 reads
+`use_equip_add_goods_rule_with_refresh_shop`), binds nothing. The registry keys stay `item:<itemKey>` of the loaded data,
+so the dispatcher, the built-ins and the bots see no difference. The battle side does the same (`items/battle.js`
+`BY_EFFECT`, docs/SIM.md §7.2).
 
 ### 2.2 Hooks and events
 Every handler method is `(ctx, ev)`; `ev` is shared by all handlers of one dispatch and may be mutated where noted.
@@ -379,7 +439,7 @@ Every handler method is `(ctx, ev)`; `ev` is shared by all handlers of one dispa
 |---|---|---|
 | `onIncome` | ROUND_START, before the income is credited | `{ round, income, pending }` — write `ev.income` / `ev.pending` (e.g. 老鲤 withholds R1–R2 income until R3) |
 | `onRoundStart` | ROUND_START, after income / shop roll | `{ round }` |
-| `onPrepStart` | PREP opens (after 机变) | `{ round }` |
+| `onPrepStart` | PREP opens (after 机变) | `{ round }` — the strategies' 「进入休整期时」 / 「休整期开始时」 grants (老鲤, 松桐, 杜宾, 娜仁图亚, the `preparation_start_*` keys; GitHub #851, DESIGN §35.24) and the operators' 「<进入休整期时>」 traits (SERVER_PREP_START, §2.3; DESIGN §35.53) |
 | `onPrepEnd` | prep end, before funds are cleared | `{ round }` |
 | `onGain` | a chess / item was acquired (buy, reward, grant, merge result) | `{ piece, kind:'chess'|'item', source }` |
 | `onSold` | a chess was sold (after refund of copies) | `{ piece, gain }` — **write `ev.gain`** to change the funds paid |
@@ -389,7 +449,7 @@ Every handler method is `(ctx, ev)`; `ev` is shared by all handlers of one dispa
 | `onMerge` | chess or item merge | `{ kind, piece, baseId|itemId, consumed:[uid], area? }` — a chess merge's `area` is where its elite went: 'board' (a consumed copy's tile) \| 'hand' \| 'temp' |
 | `onLevelUp` | shop level up | `{ level, price }` |
 | `onSpend` | a payment's action is complete (buy / refresh / levelUp / reward / effect) | `{ amount, reason, total }` (`total` = funds spent this match) |
-| `onBattleStart` | a battle input is built (normal / unite / boss / hidden); also for the stats preview (`g.unitStats`, DESIGN §18.5) and bot rehearsals | `{ input: PlayerBattleInput, kind, round, spawns?, routes?, side?, preview? }` — mutate/replace `ev.input`; `ev.spawns` (the field's spawn list, shared by a boss field's players) may be edited in place. Boss / hidden fields also carry the wave's `routes` and the player's `side` ('L' / 'R' on a pair field — its half is the routes ending left / right of the middle column — null on a one-player field), so a handler can edit only the player's own enemies (鸭爵's swap). With `ev.preview` true the dispatcher isolates the event and context: copied reads, no-op state writers (also on teammates/player), an independent RNG and script budget, no match error logging. Handlers may edit the detached input and spawns; stats previews omit spawns. Normal starts retain their live context and RNG |
+| `onBattleStart` | a battle input is built (normal / unite / boss / hidden); also for the stats preview (`g.unitStats`, DESIGN §18.5) and bot rehearsals | `{ input: PlayerBattleInput, kind, round, spawns?, waveSpawns?, routes?, side?, preview? }` — mutate/replace `ev.input`; `ev.spawns` (the field's spawn list, shared by a boss field's players) may be edited in place; `ev.waveSpawns` (normal / boss / hidden) is a copy of the round's own wave before the player's bounty units, for a draw every player shares (鸭爵, GitHub #839). Boss / hidden fields also carry the wave's `routes` and the player's `side` ('L' / 'R' on a pair field — its half is the routes ending left / right of the middle column — null on a one-player field), so a handler can edit only the player's own enemies (鸭爵's swap). With `ev.preview` true the dispatcher isolates the event and context: copied reads, no-op state writers (also on teammates/player), an independent RNG and script budget, no match error logging. Handlers may edit the detached input and spawns; stats previews omit spawns. Normal starts retain their live context and RNG |
 | `onBattleResult` | SETTLE (normal rounds) and after boss fields | `{ result, lpLoss, perfect, unite?|boss? }` |
 | `onChoicePick` | a 机变 card was applied (the card's own `choice:` handler runs first, then every source observes) | `{ card, family, picker, forTeammate }` |
 | `onEquip` | `g.equip` (item handler only) | `{ item, target, golden, consumed, keep, error }` — see §2.5 |
@@ -415,7 +475,7 @@ that per garrison with `garrisonHooks(garrison) → hook[]`, e.g. "<进入休整
 | eventType | hook | whose garrisons |
 |---|---|---|
 | `SERVER_GAIN` 获得时 | `onGain` | the gained piece — run **×2 while 投资人 is active, ×3 at ≥ 100 投资人 layers** |
-| `SERVER_PREP_START` 进入休整期时 | `onRoundStart` | owned chess: board, and hand unless `bbStr.conditionkey === 'character_target_inboard'` |
+| `SERVER_PREP_START` 进入休整期时 | `onPrepStart` (PREP opens, after the 机变 draft — DESIGN §35.53; the strategies' grants moved in §35.24; until 0.3.2 `onRoundStart`) | owned chess: board, and hand unless `bbStr.conditionkey === 'character_target_inboard'` |
 | `SERVER_PREP_FIN` 休整期结束时 | `onPrepEnd` | same |
 | `SERVER_REFRESH_SHOP` 刷新时 | `onRefresh` | same, as they stood when the refresh happened (taken before its first handler: a chess gained during the dispatch — 贾维's gift, the elite it completes — waits for the next refresh; one that left is skipped) — manual refreshes only (`ev.trigger` marks a re-run); 拉普兰德's "本回合首次主动刷新" counts per copy (`incPieceCounter`) |
 | `SERVER_CHESS_SOLD` 售出时 | `onSold` | the sold piece |
@@ -439,7 +499,8 @@ registry.garrison('SERVER_ADD_BOND_METHOD', {
 ### 2.4 The handler context (`ctx`)
 Reads: `playerId seat name round phase modeId difficulty isSolo isCoop data (frozen raw data) gd (GameData) rng`
 (`rng()`, `rng.int(n)`, `rng.pick(a)`, `rng.chance(p)`, `rng.shuffle(a)` — the match's meta stream, never
-`Math.random`), `funds() lp() alive() bandId() shopLevel() bond(id) bonds() bondActive(id) bondCount(id) layers(id)
+`Math.random`), `seedFor(salt)` (a uint32 from the match seed and `salt`, the same for every player, dispatch and preview:
+`createRng(ctx.seedFor('duck:' + round))` gives every player of a round the same draw, GitHub #839), `funds() lp() alive() bandId() shopLevel() bond(id) bonds() bondActive(id) bondCount(id) layers(id)
 board() hand() temp() piece(uid) pieceAt(row, col) pieceBonds(uid) garrisonsOf(uid) chessRecord(id) stats() roundStats()
 shopSlots() effect(id)` (`piece(uid)` adds `area`, `holderUid`, `idx`; "身前一格" of (r, c) is (r, c + 1)),
 counters `counter(k) setCounter(k, v) incCounter(k, n)` (player scope, persistent; prefix keys with your module) and
@@ -718,8 +779,9 @@ Any `choice:` handler whose EffectRef reuses its own key must guard like this (o
   (own phase perfect) go to pending funds; bounty rounds decrement; LP ≤ 0 ⇒ eliminated (all copies back to the pool).
 * **Final Assault / Hidden Core**: finalAssault.js header. Boards are passed in board coordinates; the sim maps board
   rows 9–12 onto boss rows 2–5 (`BOSS_ROW_OFFSET` −7, matching every stage's boss rows) and mirrors the right side.
-  Pairing uses a separate seeded shuffle once per match, before Final Assault prep; `bossPairs` retains partners and
-  sides into Hidden Core. A departure preserves intact pairs and joins the remaining single players. The published
+  Pairing uses a separate seeded shuffle before Final Assault prep (salt `boss-pairs`) and a new one before Hidden Core
+  prep (salt `boss-pairs:15`, `finalAssault.js bossPairSalt`: pairs and sides drawn anew, GitHub #845, DESIGN §35.27);
+  within a round a departure preserves intact pairs and joins the remaining single players. The published
   `m.public.bossPairs` follows the preparation plan; camera, placement and green team frames use it, never new draws.
   Pool (`finalAssault.js bossPoolHp` → `GameData.bossPoolShare` → `gamedata.js bossPoolShareOf`, DESIGN §20.10,
   §25.13.4): one pool shared by every boss field (official tip "最终攻势中，所有人将一起对敌方领袖造成伤害"; notice 5114's
@@ -755,7 +817,7 @@ Any `choice:` handler whose EffectRef reuses its own key must guard like this (o
   no report (an in-flight `b.progress`, the final `b.result` with its rounded per-player damage) credits the pool.
   **限伤** (research 11 §2; client `AutoChessStepModeManager._OnBossEnemyTakeDamage`): in both boss rounds a single hit
   on a leader with ceil(damage) ≥ `BOSS_HIT_LIMIT` = 300000 (shared/constants.js; 0 / Infinity = off) is cancelled in the
-  sim (`sim/damage.js leaderHitCancelled`, SIM.md §4) — it deals 0 and nothing reaches the shared pool, the per-player
+  sim (`sim/attack/health.js leaderHitCancelled`, SIM.md §4) — it deals 0 and nothing reaches the shared pool, the per-player
   boss damage or the BOSS_HIT tickers; minions, parts, normal rounds and 联防 are unaffected. 胄's drone link (2 % of the
   pool when a drone dies) is a share, no hit, and passes the limit (`Battle.loseHp noHitLimit`; with the per-player pool
   a hidden 胄 终极 drone is 432 000 / 576 000 at 3 / 4 players [ASSUMED], §25.13.4). The server's own runs, the browsers'
@@ -973,9 +1035,11 @@ round was over. The official 1 s `broadcastBeginDelay` is not modelled.
 
 ## Opening rerolls and bot reactions (0.2.3)
 
-`match/setupVote.js` owns the INFO_CHECK vote and transactional opening replacement; `Lobby.rerollSetup` checks host
-permission for `room.rerollSetup {setupRevision}` and `room.cancelReroll {voteId}`. Participants send
-`g.rerollVote {voteId, agree}`; `g.infoReady {setupRevision?}` accepts an omitted revision only before the first reroll.
+`match/setupVote.js` owns the INFO_CHECK vote and transactional opening replacement; `Lobby.rerollSetup` accepts
+`room.rerollSetup {setupRevision}` and `room.cancelReroll {voteId}` from any seated player and refuses spectators.
+Participants send `g.rerollVote {voteId, agree}`; `g.infoReady {setupRevision?}` accepts an omitted revision only before
+the first reroll. Each seat may start one vote per 30 s (`ERR.RATE`): a completed reroll clears that cooldown (a new
+opening is a new window), a cancelled vote does not, and leaving the seat drops it.
 `m.public` includes `setupRevision` and `rerollVote` (null or `{id, proposerId, voters, agreed}`). Old vote/revision
 requests cannot affect a new opening. See DESIGN §28.21 for cancellation and timer behavior.
 

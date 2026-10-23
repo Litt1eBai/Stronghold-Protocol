@@ -3,7 +3,7 @@
 // local pick back to the card the room acknowledges instead of leaving "mine changed, teammates' not".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardOperators, syncRoomCard } from '../../public/js/screens/room.js';
+import { cardOperators } from '../../public/js/ui/seatArt.js';
 
 test('the seat card picker includes a room content set operator (P2)', () => {
   const list = cardOperators([
@@ -18,15 +18,5 @@ test('the seat card picker includes a room content set operator (P2)', () => {
   assert.equal(list.find((c) => c.charId === 'char_plugin').name, 'B elite', 'one record per charId, elite preferred');
 });
 
-test('a refused room.card falls back to the room card; an unchanged or unknown pick sends nothing (P2)', async () => {
-  const sent = [];
-  const net = { request: async (t, msg) => { sent.push([t, msg]); if (msg.charId === 'char_bad') throw new Error('BAD_MSG'); return { t: 'ok' }; } };
-  assert.equal(await syncRoomCard(net, { charId: 'char_old', roomCard: 'char_old', known: true }), null);
-  assert.equal(await syncRoomCard(net, { charId: 'char_unknown', roomCard: '', known: false }), null);
-  assert.equal(sent.length, 0, 'unchanged or not in the picker: no request');
-  assert.equal(await syncRoomCard(net, { charId: 'char_new', roomCard: 'char_old', known: true }), null);
-  assert.deepEqual(sent[0], ['room.card', { charId: 'char_new' }]);
-  assert.equal(await syncRoomCard(net, { charId: 'char_bad', roomCard: 'char_old', known: true }), 'char_old');
-  assert.equal(await syncRoomCard(net, { charId: '', roomCard: 'char_old', known: true }), null);
-  assert.deepEqual(sent.map(([, msg]) => msg.charId), ['char_new', 'char_bad', '']);
-});
+// Synchronization retries and rejected selections are now covered by test/ui/card-sync.test.js
+// through the upstream installCardSync engine, rather than the retired room-screen helper.
