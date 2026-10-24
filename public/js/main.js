@@ -58,7 +58,8 @@ import { audio, installAudio } from './audio.js';
 import { installLobbyMedia } from './ui/lobbyMedia.js';
 import { settingsStore } from './ui/settings.js';
 import { GuideHost } from './ui/guide.js';
-import { installDeviceSupport } from './ui/device.js';
+import { installDeviceSupport, useFullscreen, useScreenWakeLock } from './ui/device.js';
+import { isCombatPhase } from './ui/gameLogic/phases.js';
 import { registerImportedAssetWorker } from './assetCache.js';
 import { LoadoutHost } from './screens/loadout.js';
 import { StatsHost, useStatsOpen } from './screens/stats.js';
@@ -187,7 +188,9 @@ function onWelcome(msg) {
   });
   welcomeAt = Date.now();
 
-  if (prevId != null && prevId !== msg.playerId) {
+  if (msg.takeoverFrom === prevId && prevId != null) {
+    toast(t('你已接管AI席位，资金、阵容与席位已保留'), 'info');
+  } else if (prevId != null && prevId !== msg.playerId) {
     // A brand-new server session (the server restarted — crashed / killed, so no room.closed arrived — or this session
     // expired on it): whatever we showed before is gone — back to the lobby cleanly and say why.
     const notice = sessionResetNotice(prev, msg.playerId);
@@ -366,6 +369,11 @@ function ScreenCrashed({ error, reset }) {
 
 function App() {
   const route = useStore(selectRoute);
+  const combatActive = useStore((s) => selectRoute(s) === 'game' && s.room?.inMatch === true
+    && !s.match?.result && isCombatPhase(s.match?.public?.phase));
+  const fullscreenWakeLock = useStore((s) => s.fullscreenWakeLock, Object.is, settingsStore);
+  const fullscreenActive = useFullscreen();
+  useScreenWakeLock(combatActive || (fullscreenWakeLock && fullscreenActive));
   useLang(); // a language switch re-renders the whole tree in place
   const [error, resetError] = useErrorBoundary((err) => console.error('[ui] screen crashed', err));
   const Screen = SCREENS[route] || LobbyScreen;

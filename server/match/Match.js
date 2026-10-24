@@ -246,7 +246,7 @@ import { MatchSettle } from './match/settle.js';
 import { installTestTrace } from './testTrace.js';
 import { MatchTestCommands } from './match/testCommands.js';
 import { MatchOffers } from './match/offers.js';
-import { ExternalAI } from './externalAI.js';
+import { createExternalAI } from './llmGate.js';
 
 export { FLOW_TICKER_PRIORITY, DELAYS, BAND_TURN_SECONDS } from './match/common.js';
 
@@ -382,6 +382,14 @@ export class Match {
     this._rehearsalSeq = 0;
     /** how this match's delegated rehearsals ended (the log lines above; the tests read it) */
     this.rehearsalStats = { delegated: 0, answered: 0, takeovers: 0 };
+    /**
+     * The server's own simulation pool (server/workers/roomPool.js), or null when the operator started none. It is a
+     * placement decision only: `poolRehearsal` submits the same candidates the local run would simulate and falls back
+     * to simulating them here whenever the pool is absent, busy or broken.
+     */
+    this.simPool = opts.simPool || null;
+    /** how the bot rehearsals that were offered to `simPool` ended — separate from rehearsalStats (its keys are asserted) */
+    this.rehearsalPoolStats = { pooled: 0, accepted: 0, fallbacks: 0 };
     this.ds = dataSourceFor(this.data);
     /** client-side combat (DESIGN §14) — see the header */
     this.clientCombat = opts.clientCombat != null ? !!opts.clientCombat : envClientCombat();
@@ -526,7 +534,7 @@ export class Match {
     // [ASSUMED] A real scheduler keeps the 8 ms bot and headless slices, including a test match,
     // so one callback cannot run to HARD_CAP_SECONDS. Virtual time stays unbounded (the defaults
     // above). The input journal records the steps that callback took; replay stops there.
-    this.externalAI = this.bot.id === 'external' ? new ExternalAI(this, opts.externalAI, opts.externalReplay === true) : null;
+    this.externalAI = createExternalAI(this, opts);
     if (this.test && opts.journal !== false) installTestTrace(this, opts);
   }
 }

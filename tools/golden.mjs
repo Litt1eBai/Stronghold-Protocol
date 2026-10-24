@@ -62,7 +62,7 @@
 
 import { toolVersion } from './versions/runtime.mjs';
 import { DEFAULT_VERSION, versionById, versionSlug } from '../shared/versions.js';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, writeSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { availableParallelism } from 'node:os';
@@ -1291,6 +1291,17 @@ if (!isMainThread && workerData && workerData.golden) {
   });
 }
 
+/** Blocking write of `text` to stdout. A pipe may accept only part of one write; loop until all of it is in the kernel. */
+function writeStdoutSync(text) {
+  const buf = Buffer.from(text);
+  let offset = 0;
+  while (offset < buf.length) {
+    const n = writeSync(1, buf, offset, buf.length - offset);
+    if (n <= 0) throw new Error('golden --list: stdout accepted no bytes');
+    offset += n;
+  }
+}
+
 const isMain = isMainThread && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   const argv = process.argv.slice(2);
@@ -1307,8 +1318,13 @@ if (isMain) {
   if (opt.list) {
     const lines = [];
     for (const f of families) for (const sc of scenariosOf(f)) if (select(sc)) lines.push(`${f}\t${sc.id}\t${sc.fast ? 'fast' : ''}\t${sc.about ?? ''}`.slice(0, 220));
-    // Explicit process.exit must not truncate the larger historical corpus on a piped stdout.
-    writeFileSync(1, `${lines.join('\n')}\n`);
+    // A POSIX pipe takes stdout asynchronously, and process.exit() abandons writes still queued in
+    // userland (Node's documented pipe behaviour). Ubuntu's Node 22 job lost the tail of this list for
+    // act2autochess@V2_1: the child exited 0 and the captured lines stopped at diy-103, while the same
+    // commit's smaller version lists, Windows (pipes write synchronously) and Node 24 printed diy-126.
+    // writeSync blocks until the kernel has accepted every byte. The list is generated from the version
+    // directory's tracked JSON and the kit sources; it does not read data/local-assets.json, data/local-fx.json or .cache.
+    if (lines.length) writeStdoutSync(`${lines.join('\n')}\n`);
     process.exit(0);
   }
   const t0 = performance.now();

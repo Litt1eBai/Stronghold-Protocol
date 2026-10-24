@@ -81,11 +81,8 @@ APK 构建时把服务器地址固定为同一个 HTTPS 域名；构建完成后
 
 **房主帮 AI 试算布阵（可选）：**环境变量 `SP_BOT_REHEARSAL` 不设或设为 `server` 时，AI 布阵试算仍在服务器上（默认）。设为 `host` 后，当前房主的浏览器在整备阶段用同源的模块 Worker（`/js/battle/rehearsalWorker.js`，不绘图、不用 `eval`）比较 AI 队友的几种布阵，只把选中的序号发回；服务器直接采用，不再重算。房主掉线、换人、报错、答案不合法或超时（默认 3 秒）时，服务器用同一批候选自己算。整备先结束则取消试算、保留默认布阵，不延长回合。正式战斗和真人「AI 托管」不受影响。开了玩法插件的房间不走这条路：对局在内容组合自己的进程里，仍由服务器试算，避免浏览器用错数据包或绕过脚本额度。没有可用房主时也不会减少服务器负担。浏览器会多算一些，耗时取决于房主设备和局面。这个接口（任务、答案序号、超时、回退到服务器）以后可以换成本机或外部计算，当前版本不会对外发起网络请求。
 
-**外部 AI（默认关闭）：**`SP_BOT_STRATEGY=external` 可让指定 AI 席位通过 HTTP(S) 或本机 stdio 程序决策，
-只发送已有公开视图与该席位私有视图，所有操作按真人校验，失败自动回退原 AI，不延长阶段倒计时。
-这是独立于房主代算布阵的 #673 策略扩展（维护者 2026-10-17 决定）；配置与本机示例见
-[服主接入指南](EXTERNAL_AI_ZH.md)，协议、超时及安全说明见 [External AI API](EXTERNAL_AI.md)。
-本机程序具有服务器权限；第三方服务能看到该席位视图，请由服主自行选择可信服务。
+**外部 AI（目前仅开发分支，不随发布包提供）：**维护者 2026-10-23 决定，在语言模型席位的终极胜率接近 100% 之前，外部 AI 与顾问模式不进入发布包、更新包和 Docker 镜像（§35.66）。发布包里的服务器遇到 `SP_BOT_STRATEGY=external`、`SP_EXTERNAL_AI_*` 或 `SP_LLM_*` 时不崩溃、不连外网，忽略这些设置，用内置 AI，并打一行日志。内置 AI 和 #673 策略框架照常随包提供。从源码运行的开发分支仍可按
+[服主接入指南](EXTERNAL_AI_ZH.md)与 [External AI API](EXTERNAL_AI.md) 配置；本机程序具有服务器权限，第三方服务能看到该席位视图，请自行选择可信服务。
 
 
 ## 1. Windows 小主机：一步步
@@ -376,7 +373,7 @@ docker run -d --name stronghold -p 3000:3000 --restart unless-stopped \
   -v "$PWD/public/assets:/app/public/assets:ro" stronghold-protocol
 ```
 
-镜像从源码（`git clone`）构建，Releases 的整合包不含 `Dockerfile`。镜像基于 `node:22-alpine`，多阶段构建，只含生产依赖（包括 `ses@2.3.0` 和 `acorn@8.18.0`）；`public/vendor`（含 `ses.umd.js` / `acorn.mjs`）在构建时生成。`node_modules` 是镜像安装目录里的实际文件，不是指向镜像外的符号链接，脚本沙箱子进程可以在 `--allow-fs-read` 范围内读取。`.dockerignore` 排除了 `public/assets`（不会把宿主机素材打进构建上下文）；`public/fonts`、`data/assets.json` 和 `data/local-assets.json` 若存在会被复制进去。环境变量同 README（`-e SP_VERIFY=sample` 等）。健康检查：`GET /healthz`。
+镜像从源码（`git clone`）构建，Releases 的整合包不含 `Dockerfile`。镜像基于 `node:22-alpine`，多阶段构建，只含生产依赖（包括 `ses@2.3.0` 和 `acorn@8.18.0`）；`public/vendor`（含 `ses.umd.js` / `acorn.mjs`）在构建时生成。构建阶段会删掉外部 AI / 语言模型集成的文件并写入 `server/release-without-llm`，与发布包同一道门（§35.66）：镜像里的服务器忽略 `SP_BOT_STRATEGY=external` 及相关变量，用内置 AI。`node_modules` 是镜像安装目录里的实际文件，不是指向镜像外的符号链接，脚本沙箱子进程可以在 `--allow-fs-read` 范围内读取。`.dockerignore` 排除了 `public/assets`（不会把宿主机素材打进构建上下文）；`public/fonts`、`data/assets.json` 和 `data/local-assets.json` 若存在会被复制进去。环境变量同 README（`-e SP_VERIFY=sample` 等）。健康检查：`GET /healthz`。
 
 **持久化插件**：把命名卷或宿主机目录挂到 `/app/plugins`，例如加 `-v stronghold-plugins:/app/plugins`。
 镜像在 `/app/plugin-resources` 保留只读的 `_template/`、`README.md` 和 `AGENTS.md`，用
@@ -537,7 +534,7 @@ npm.cmd --prefix client ci
 
 ## 6. 本地客户端素材（可选）
 
-`public/assets/local/` 和 `data/local-assets.json` 是从本机安装的《明日方舟》客户端里提取的官方素材（`tools/local-extract`，DESIGN §13）：`node tools/setup.mjs` 检测到客户端时会询问是否提取，之后可以用 `node tools/setup.mjs --local` 重新提取，或用 `--game "<…/StreamingAssets/AB/Windows>"` 指定客户端目录。setup 从公开镜像下载的素材不包含这部分，所以在没有客户端的电脑上（例如 Linux 服务器）用源码或精简包部署时不会有它；Releases 的完整包里已经带上了。
+`public/assets/local/` 和 `data/local-assets.json` 是从本机安装的《明日方舟》客户端里提取的官方素材（`tools/local-extract`，DESIGN §13）：`node tools/setup.mjs` 检测到客户端时会询问是否提取，之后可以用 `node tools/setup.mjs --local` 重新提取，或用 `--game "<安装目录或 …/StreamingAssets/AB/Windows>"` 指定客户端目录（安装目录和「Arknights Game」都可以，成功后记住解析出的资源目录）。setup 从公开镜像下载的素材不包含这部分，所以在没有客户端的电脑上（例如 Linux 服务器）用源码或精简包部署时不会有它；Releases 的完整包里已经带上了。
 
 没有本地素材时游戏照常运行，只是下面几样换成替代样式：
 
@@ -731,3 +728,39 @@ Node 22 的 `--permission` **不限制网络**（TCP/UDP/DNS/监听均可能可�
 - 玩家第一次进入某个版本时，浏览器要下载该版本的数据（约 5 MB，之后缓存）。
 - `http://localhost:3000/healthz` 在启用了非默认版本时多一项 `versions`：启用的版本、默认版本和版本子进程的数量。
 - 也可以在 `startServer({ versions: { enabled, default, maxHosts } })` 里设置（优先于环境变量）。
+
+## 12. 容量与调优（服务端配额）
+
+以下配额默认写死在代码里，都能用环境变量覆盖；显式传给 `startServer()` 的选项仍然优先，所以测试完全可控。
+启动时会打一行日志，写明实际生效的值：
+
+```
+[http] limits: rooms 1000 (16/network), matches 8/network, sockets 2000 (64/network)
+```
+
+`0` 在两类配额上含义不同：**全局配额**（`SP_MAX_ROOMS`、`SP_MAX_CONNECTIONS`）取 `0` 是全部拒绝；**按网络配额**
+（带 `_PER_ADDR` 的三个）取 `0` 才是不限制。
+
+| 变量 | 默认 | 含义 |
+| --- | --- | --- |
+| `SP_MAX_ROOMS` | 1000 | 全局房间数上限（`0` = 全部拒绝）。满员后新建房间返回「服务器内部错误」 |
+| `SP_MAX_ROOMS_PER_ADDR` | 16 | 单个客户端网络同时存在的房间数（`0` = 不限） |
+| `SP_MAX_MATCHES_PER_ADDR` | 8 | 单个客户端网络同时进行的对局数（`0` = 不限） |
+| `SP_MAX_CONNECTIONS` | 2000 | 并发 WebSocket 连接数（`0` = 全部拒绝）。全局满员时新连接在升级阶段返回 **503** |
+| `SP_MAX_CONNECTIONS_PER_ADDR` | 64 | 单个客户端网络的并发连接数（`0` = 不限）。单个网络超限时在升级阶段返回 **429** |
+| `SP_MAX_ONLINE` | 0 | 同时在线的**已认证玩家**上限（`0` = 不限）。满了只拒绝新会话（玩家看到「服务器已满」），重新连回来的 token 照常放行（只限在线人数这一层，见下面「重连不会被拒」的两条前提） |
+
+几点运维提醒：
+
+- **503 / 429 只描述连接数配额。** 全局连接数满了是 **503**，只有单个网络连接数超限才是 **429**；两者都在升级阶段就结束，
+  socket 根本建不起来，也不会进入游戏协议。另外两个配额不在这一层，别混着排查：**在线人数**（`SP_MAX_ONLINE`）满了是
+  `hello` 之后才回的一帧「服务器已满」（已经带着 token 在玩的人不受影响），**房间数**上限满了是游戏内的错误回包。
+- 「按网络」的口径来自 `clientAddress()`：只有在 `TRUST_PROXY` 允许时才会信任 `CF-Connecting-IP` / `X-Real-IP` /
+  `X-Forwarded-For`，否则整条 NAT / CGNAT 后面的玩家会共用一个配额 —— 家里直连、没有反代时不要打开 `TRUST_PROXY=1`。
+- 写了非法值（非整数、负数）会**告警并保持默认**，不会因为一个拼写错误把保护悄悄去掉。
+- 「重连不会被拒」只在**在线人数**这一层成立，另外两个前提照样生效：**连接数**上限（`SP_MAX_CONNECTIONS`）满了，
+  带 token 的连接同样在升级阶段被 **503** 挡住；会话还在另一条 socket 上活着时，`noReplace`（或更旧的 `claimAt`）
+  会让这个 `hello` 回「会话已在别处使用」而不是接管，拿不回原来的身份。
+- 房间要等它被真正从大厅移除（`disposeRoom`）才归还配额，玩家掉线不算：大厅断线宽限（`lobbyGraceMs`）和对局中的会话重连窗口是两只独立的时钟。
+  前者管理未开局房间中的断线成员，后者管理对局重连；不能用其中一个期限推断另一个期限或整个房间的销毁时间。
+  排查「明明没人了还开不出房」时，先看房间是否仍存在、是否正在等待断线成员。

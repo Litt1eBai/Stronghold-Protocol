@@ -137,6 +137,7 @@
 // The helpers live in public/js/render/app/*.js and are re-exported below, so existing imports keep
 // working. createFieldView stays here: it is one closure over the view's own state.
 
+import { attackRateEvents } from './attackRate.js';
 import { GEO, ANIM } from '../../../shared/constants.js';
 import { fxForm } from '../../../shared/protocol.js';
 import { Camera, presetCamera, lerpCamera, easeInOutCubic, pickTile, normRect } from './projection.js';
@@ -1670,7 +1671,7 @@ export async function createFieldView(host, options = {}) {
     }
     // the official effects of units joining the battle load ahead of their first attack (render/vfx/wiring.js more)
     if (fresh) wiring.more(fresh);
-    return interp.pushEvents(list, performance.now() / 1000, t);
+    return interp.pushEvents(attackRateEvents(list), performance.now() / 1000, t);
   }
 
   // attack wind-ups: an 'atk' still queued in the buffer starts its Spine clip early enough for the strike frame to
@@ -1696,7 +1697,9 @@ export async function createFieldView(host, options = {}) {
         const info = applyInfo(e[1]);
         if (!info) break;
         gone.delete(info.id);
+        const reused = views.get(info.id);   // a 重生 / a second life keeps the view: re-seed its pacing (#729)
         const v = battleView(info.id);
+        if (v && reused) v.respawn?.(info);
         if (v && info.side === 'enemy' && renderT0Battle != null && now - renderT0Battle > 0.2) fx.ring(info.x, info.y, 0, 0.1, 0.7, 0xff5a4a, 0.4);
         // an enemy's or a summon's deploy talents (render/vfx/talentfx.js: auras, birth effects — once per life)
         if (v) wiring.spawned(v);
@@ -1764,6 +1767,12 @@ export async function createFieldView(host, options = {}) {
           v.dying = 0.25; v.dieDur = 0.25;
         }
         fx.leak();
+        break;
+      }
+      case 'rate': {
+        // the sim's own attack interval changed (a skill, an attack-speed buff): pace the clip over it from the next swing
+        const v = views.get(e[1]);
+        if (v && typeof v.setAtkInterval === 'function') v.setAtkInterval(Number(e[2]));
         break;
       }
       case 'status': { const v = views.get(e[1]); if (v) { v.onStatus?.(e[2], !!e[3]); wiring.status(v, e[2], !!e[3]); } break; }

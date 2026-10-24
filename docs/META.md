@@ -33,6 +33,7 @@ server/match/
   fields.js        FieldRunner: battle pacing (2×), snapshots, per-field error isolation
   results.js       m.result rows, titles, trophies, rewards
   bot.js           AI player (AI teammates, departed humans, "AI 托管")
+  botStrategies.js registered trusted AI hooks (default legacy; opt-in external, ioleta, adaptive, ioleta-adaptive), see BOT_STRATEGIES.md
   scheduler.js     RealScheduler / VirtualScheduler
   StubMatch.js     the old platform stub (platform tests only)
 ```
@@ -237,6 +238,26 @@ The rest of this section is the legacy server-run mode
 另一组队友的战场情况" → `BAD_TARGET 'other group hidden'`); eliminated / departed players spectate any field.
 
 ### 1.5 AI player (bot.js)
+
+The synchronous prep orchestrator lives in `server/match/botPrep.js`. `bot.js` binds its existing actions through
+`createBotPrepSteps(actions)`; trusted strategies can override an operation while keeping reward, economy,
+placement and cleanup sequencing. Overrides are synchronous functions or synchronous iterators according to the
+operation they replace. Each iterator yields only between complete actions. Per-seat state belongs to the player
+or match, never the shared action definition. The default adapter retains the original action references, refresh
+limit, yield boundaries, delegated job and Ready path. Purchase scoring remains inside the bound economy actions.
+With an advisor plan (`economyPlan`), prep begin spends expiring funds after the spare level-up and prep end rechecks
+them before Ready (§35.13–35.14); without one these steps do nothing.
+
+An opt-in `createContactPrepSteps()` adapter uses `contactCandidatePlansSteps` for final ordinary-round layouts.
+It derives contacts from current routes and resolved ranges, retaining existing damage activity, air exposure,
+healing and held routes. Pure medics and tokens remain fixed during search; normal deployment still handles summons.
+[ASSUMED] Contact weighting and the two-pass local search are AI heuristics. The adapter keeps the default candidate
+and earlier variants, using the final configured rehearsal slot for one distinct repair (maximum eight candidates).
+With a budget of three, the first two original candidates precede the repair. Disabled/single-candidate rehearsal,
+Boss/hidden rounds, missing geometry and duplicate repairs retain the original candidates. The normal Match path
+still uses the legacy prep adapter; a trusted strategy must explicitly select these hooks.
+
+
 **Strategy** (`botPickBand`): weighted by starting LP among the offered bands (alone, 老鲤's withheld first-round funds
 × 0.02); a band whose mechanic rides on a bond the mode switches off weighs 0 — `GameData.bandBondIds` (bands.json
 `bondIds`, built by shared/bandBonds.js: the bond names in <…> of its text, the bond ids / bond pools of its blackboards)
@@ -286,7 +307,8 @@ they act on (a 盟誓 / 驰援 card on its bonds, 升华, …). Placement uses t
 over the own board (ground: the stage's device-aware ground paths; flyers: through their checkpoints) and weighted by
 its enemies; an exposure model (time on each tile × DPS against the round's armour of the units covering it — each
 unit's cover is the range it is deployed with under the player's loadout, `rangeRec` = `attackRangeGrid`, the grid the
-server's `summonRange` and the card use —, blocker hold time, anti-air only on flying routes) is maximized greedily
+server's `summonRange` and the card use — except 信仰搅拌机 S3, which is planned on that skill's own two-side grid,
+and which SPT-Y does not grow (#31) —, blocker hold time, anti-air only on flying routes) is maximized greedily
 (blockers, then damage dealers, then healers) over the server's deploy map (no 深水区, PlayerState.deployMap); a
 blocker whose range is its own tile only (range 0-1, the one grid (0,0): 角峰, 古米, 泡泡, 折桠, 菲莱, 蛇屠箱, 塞雷娅, 余) takes a free
 tile of the enemy road first — it blocks and hits nothing off it — and only when the road has none free any legal tile (0.2.2, PR #339 by
@@ -305,7 +327,12 @@ prefer allied estimated DPS not already covered by another placed medic, then ti
 **Rehearsal:** with `opts.botRehearsal = N` (default 3) the bot simulates the N best
 distinct layout variants once each with the real `Battle` and `Match._normalOpts`, including `onBattleStart`, enemy
 replacements, teammate effects and in-battle layer gains. [ASSUMED] Every candidate uses the normal field seed (#315)
-and its own clone of the current meta RNG. `previewPlayer` builds a detached candidate board/hand/bonds view without
+and its own clone of the current meta RNG. A boss round (`m.wave` null, `bossGroupOf` already planned) rehearses the
+same variants on that wave: seed `deriveSeed(0xA11CE, fa:${round}:${seat})` — not the match seed and not the live
+fight's seed — a fresh `bossPoolHp` pool per candidate, the teammate's current board, preview dispatch only, and a
+cap of the visible countdown on the combat clock (`faRehearsalTicks`: `bossLevelTime` × `combatTimeScale` game
+seconds; history §35.64). Counted leaks still rank first; `perPlayer.bossDamage` breaks a leak tie.
+`previewPlayer` builds a detached candidate board/hand/bonds view without
 calling live `recompute`; the original pieces, directions, hand/temp and dirty flags never change, even at a yield.
 The preview dispatcher supplies copied read results, no-op state writers, isolated teammate/player contexts and a
 local script budget; errors stay out of match diagnostics, and preview results never reach settlement. Actual starts
@@ -370,6 +397,8 @@ plugin offers keep their phase timers. Legacy finishes incomplete/failed decisio
 1000 ms restart backoff; at most half the remaining phase time is spent on external decisions. Journals record
 replies and failures, replay without transport IO, and omit endpoint/command/credentials. See
 [External AI API](EXTERNAL_AI.md) and the [Chinese server-owner guide](EXTERNAL_AI_ZH.md).
+A release package omits this host (maintainer 2026-10-23, §35.66): the zip, the update package and the Docker image
+leave the files out, and a packaged server ignores external-AI settings and plays the built-in bot.
 
 The maintainer's 2026-10-19 advisor extension (§35.9) adds `mode: 'plan'`: once per prep round the external
 agent returns bounded preferences and legacy executes its procurement and rehearsal. Band/card/offer replies
@@ -967,6 +996,13 @@ round was over. The official 1 s `broadcastBeginDelay` is not modelled.
 
 ## 6. Testing & tools
 
+`opts.botStrategy` / `SP_BOT_STRATEGY` select the registered AI per match, default `legacy`.
+`ioleta` supplies Russell procurement through the shared prep pipeline; its state is
+`player.botStrategyState.ioleta.plan`. The HTTP server rejects unknown environment IDs at startup.
+Journal replay persists the registered ID and reconstructs the plan through deterministic prep inputs.
+`matchrun` and `botbench` accept `--bot`; botbench's solo `--band` replaces the picker while retaining band metadata.
+See [BOT_STRATEGIES](BOT_STRATEGIES.md) for composition and lifecycle details.
+
 * `test/match/lobby-integration.test.js` 的联机轮选使用固定种子 `69`，覆盖 AI 先选走默认策略的情况（GitHub #144）。模拟玩家从当前公开选牌结果中选择未被占用的策略，并断言请求成功；不依赖拒绝后的超时分配。单人和联机用例均通过 `b.start` 确认战斗开始，避免瞬间结束的模拟战斗被公开状态节流而漏掉 `COMBAT` 阶段。
 
 * `test/match/fakeBattle.js` — scriptable DESIGN §5.1 Battle (`FakeBattle.script = (battle) => plan`); inject with
@@ -983,6 +1019,10 @@ round was over. The official 1 s `broadcastBeginDelay` is not modelled.
   prep of round 4 — drafts, 机变, buying/placing, combat snapshots `gt`, watching, 联防, throttled m.public), bot (field
   model, layout planner, rehearsal side-effect freedom, economy/bench regression).
   `node --test test/match/*.test.js`
+* `test/match/fuzz.test.js` reports the failing seed, FakeBattle / real-simulation choice and match configuration,
+  followed by a single-seed replay command (POSIX shell). `MATCH_FUZZ_SEED=N` overrides each suite's seed range;
+  the printed `--test-name-pattern` selects the original suite. With no override, the corpus and successful output
+  remain unchanged. Replay against the same code, data and runtime environment; a seed does not freeze them.
 * `node tools/matchrun.mjs --mode coop --difficulty HARD --players 4 --seeds 20` — per-round balancing summary / aggregate
   (`--check` audit, `--errors` per-source error table, `--lp N` / `--layers N` to reach late rounds — the boost stops at
   999 per bond —, `--rehearsal N`).
@@ -1139,3 +1179,24 @@ blocking `battleCheck` window. Failed grants leave the seat unpicked; auto/bot f
 and skips when none grants [ASSUMED]. Native `g.offer`/`g.offerRefresh` use plugin id, local window id, sequence and slot; `m.public.offers` is a
 reconnectable, spectator-readable snapshot. Bots resolve immediately. Sources, bounds and [ASSUMED] defaults are
 [PLUGINS §10b](PLUGINS.md#10b-offers--interaction-windows); test journals carry declarations and intents.
+
+### Optional adaptive AI search
+
+`adaptive` registers the same five hooks as legacy/ioleta with legacy band picking and procurement, and adds
+map-independent formation candidates; `ioleta-adaptive` pairs that placement with Russell procurement. The same
+Match strategy handles AI and autoplay players. The fixed-three contact prefix extends to at most eight candidates
+when completed results still leak, under six strict tick caps. Full policy and inherited lifecycle:
+[BOT_STRATEGIES](BOT_STRATEGIES.md). Production LP and unite rules are unchanged.
+
+Optional server rehearsal pool (#756, §35.86): only default-version vanilla matches receive the pool.
+SP_WORKERS is unset by default. Host/process options never contain the pool object. Jobs carry BattleSpecs, the
+Final Assault cap and optional adaptive limits; failure resumes those same local candidates. Prep ending cancels
+pending work. The normal combat loop and authoritative results retain their existing execution path.
+
+State transport (§35.89): negotiated m.state frames reconstruct ordinary m.public before UI listeners run.
+Room changes reset both endpoints; a sequence gap requests one rate-limited state.resync. Plain clients, m.private
+and replay records keep full frames.
+
+### Optional spectator AI handover (§35.100, PR #691)
+
+The host’s pre-match `room.setAiTakeover {on}` opts a co-op room in; default off. Only default-version vanilla PREP supports requests. Online, non-autoplay humans throughout the room vote by strict majority; if none qualify, the online host decides. The 30-second request is bound to match/round/electorate and is cancelled on membership/eligibility/phase changes. A successful handover preserves the AI seat’s resources and rebinds the spectator token, cancels that seat’s old rehearsal, and resynchronizes its unchanged delta capability. Inherited records retain `aiTakeoverRound` and previous AI metrics but grant no personal aggregates, titles, trophies or reward. These are maintainer-approved remake-only rules [ASSUMED]; see [network](design/network.md) and [handover revision](history/0.3.2/ai-handover.md).

@@ -99,7 +99,7 @@ summon order (§30.22).
 Register hooks before the first step (e.g. `opts.setup(battle)` or right after `new Battle`).
 
 **Tick order:** scheduled callbacks → spawns → DP → buffs (+HP regen) → enemies (attack, move, block) →
-enemy tile index → allies (skill tick, attack) → projectiles → auto-redeploys → boss pool sync → `tick` hook →
+enemy tile index → allies (skill tick, attack) → rates (a changed attack interval → rate, display only)  → projectiles → auto-redeploys → boss pool sync → `tick` hook →
 release hooks/timers of units removed this tick (§1.4) → `time += TICK` → end checks.
 
 **Knocked-out operators** (PRTS 卫戍协议/帮助 §作战阶段 单位部署; player report F5 after 0.1.0): "干员退场后…原地留下一个
@@ -303,6 +303,11 @@ targets from the range (`beforeAttack`) adds `battle.blockedTargets` to its cand
 S2: icicles on random tiles of her range). This replaces the
 playtest #5 QA's melee-only reading (PRTS 索敌的概念 "我方索敌优先级：阻挡（近战限定）"; "远程位干员…无法攻击到这个敌人");
 DESIGN §20 keeps the one-line flip (`Battle.blockedTargets` / `sortEnemyTargets` gated on a melee position again).
+The parasite 假想敌：淤困 is an exception to the ordinary contact position: when it attaches, it blinks from the contact
+point to its blocker's tile centre and holds 自缚 (`selfBound` / `noMove`) until that block ends (PRTS 假想敌：淤困).
+Its route is recalculated from the new position when movement resumes. The `teleport` fx with `kind: 'parasite'`
+carries the enemy id and origin so the client snaps only this short attachment move instead of interpolating it as a walk.
+
 The every-blocker rule is for units whose attack hits enemies (咒愈师 included: "攻击造成法术伤害"). A healer — dmgType
 `heal` (医师 / 群愈师 / 疗养师 / 链愈师 / 行医, the map characters 预备干员-医疗 / Touch) or a skill attack turned into a
 heal (古米 S1 / S2, 塞雷娅 S1, 波登可 S1) — selects injured allies only and keeps healing while it blocks; it never targets
@@ -1090,7 +1095,8 @@ flag alters movement or 失衡.
   owner's standing summons — 麦哲伦 S1 (her drones' ranges), 令 S3 (each summon's x-5, ground), 电弧 S2 (赛柯's range,
   ground) / S3 (桑特拉's range): the owner's larger-range rule of 2026-10-06, kits/shared/summoner.js
   `summonTriggerArea`). 赤刃明霄陈 S3 uses an air-capable content range on its expanded grid for `ACTIVE_RANGE` too
-  (§28.26): the wave can hit flyers, its normal attacks remain ground-only. [ASSUMED] This activation area includes
+  (§28.26): the wave can hit flyers, its normal attacks remain ground-only. 凛御银灰 S3 does the same on his skill grid
+  (§35.84) — PRTS 备注 has his S3 attacks 可对空 and handed to 【丹增】 — with `targeting.canHitFly` for those attacks. [ASSUMED] This activation area includes
   permanent range extension but not the wave's eventual route. With `{ attackOnly: true }`, the extra range is checked only at the normal attack opportunity, not each tick: 蕾缪安’s own wanted targets and 死芒’s own living summons’ blocked targets (S1/S2); normal selectability and the skill’s actual effect range remain intact (§28.13). `SKILL_RANGE` — "不通过普通攻击/治疗触发技能，仅在技能范围内存在敌人（无视其不可选中）时释放技能": any
   living enemy (stealthed, untargetable, flying included) on `trigger.customRangeGrid` (= the skill's rangeGrid), every
   tick, no attack needed; `trigger.allies` (+ `hpAtMost`, default 1) — set by a kit, or by the data for an ally row (黍 S3's
@@ -1609,7 +1615,7 @@ Unknown subprofessions fall back to the profession default (test `professions.te
 
 ## 9. Wire format (snapshot.js, DESIGN §8.2)
 
-- `snapshot()` → `{ fieldId, t, units: [[id, x, y, hp, maxHp, sp, spMax, flags, anim]], dp, killed, total, resolved, dps?, boss?, down?, elem?, ammo?, coins?, energy?, wolves?, neg?, layers?, charges?, stand?, standCut? }`.
+- `snapshot()` → `{ fieldId, t, units: [[id, x, y, hp, maxHp, sp, spMax, flags, anim]], dp, killed, total, resolved, dps?, boss?, down?, elem?, ammo?, coins?, energy?, wolves?, neg?, layers?, charges?, stand?, standCut?, face? }`.
   `killed` counts every `counted` knock-out (§1.3) and `total` only the enemies this field scheduled (`inTotal`), so it may
   exceed it; `resolved = min(total, killedInTotal + leakedInTotal)` is the HUD capsule's numerator (DESIGN §14 顶栏胶囊).
   `sp/spMax` show remaining duration/ammo as a draining bar while a timed skill is active (ammo: `ammoLeft / ammoMax`, the
@@ -1623,9 +1629,11 @@ Unknown subprofessions fall back to the profession default (test `professions.te
   `DOWN_STATE`: 0 counting, 1 timer done / DP short, 2 timer done / its tile taken — a safeguard: no ally deploys on a
   knocked-out operator's tile, §1; `row, col` = the tile it lies on and comes back on, `unit.body`); `elem: [[id, element, fill,
   cooldownEnd, cooldown]]` (only when non-empty) = `elementView` of every unit with a gauge or a running 爆发冷却 (§3);
-  `ammo: [[id, left, magazine]]`, `wolves: [[id, left, max]]` and `neg: [[id, fill]]` (each only when non-empty; display only) = the HP-bar
-  readouts of `snapshot.js` `ammoView` (an ally's running ammo skill: whole rounds, the magazine = `ammoMax`), `wolfView` (伺夜's 狼群:
-  `mem.shadows` of `mem.wolfCapacity`) and `negView` (`unit.negFill()`, set by 斩业星熊's T1 业火: the 我执 pool as a share of its cap);
+  `ammo: [[id, left, magazine]]`, `wolves: [[id, left, max]]`, `neg: [[id, fill]]` and `motes: [[id, count, wide]]` (each only when
+  non-empty; display only) = the readouts of `snapshot.js` `ammoView` (an ally's running ammo skill: whole rounds, the magazine = `ammoMax`),
+  `wolfView` (伺夜's 狼群: `mem.shadows` of `mem.wolfCapacity`), `negView` (`unit.negFill()`, set by 斩业星熊's T1 业火: the 我执 pool as a
+  share of its cap) and `moteView` (`unit.moteRing()`, set by 魔王's T1 过往尘埃: the 「微尘」 still circling her and whether S2's
+  旋转半径扩大 is up — `render/motes.js` draws that many sprites of her model's own `C_Eff_Moire_B` region, §client);
   UnitInfo `ammoSkill` marks an ally whose skill is an ammo magazine (DESIGN §8.2).
   `layers: [[id, n]]` and `charges: [[id, stored, max]]` (each only when non-empty; display only, 0.3.0 round 46) =
   `snapshot.js` `layerView` (the sum of a unit's buffs' `shieldHits`: 泥岩's 护盾 layers) and `chargeView` (an ally skill
@@ -1644,6 +1652,8 @@ Unknown subprofessions fall back to the profession default (test `professions.te
   `units` (the 0.8 s death window included), never a hidden or unlisted one. The newest snapshot showing a death, a stun
   (freeze, sleep, 浮空 included) or a block is not extrapolated until a later snapshot shows it moving again; the
   extrapolated velocity uses the same moving span as the interpolation (the stand is not in its denominator).
+  `face: [[id, ±1]]` (only when non-empty; display only, not in the golden tuple, #869) is the horizontal sign
+  心虚设计师 publishes (`mem.publishFacing`): the model applies the older snapshot's sign while it is not sliding.
 - `drainEvents()` tuples: `['spawn', UnitInfo]` (first appearance), `['deploy', id]` (every (re)deploy and 【移动】 — the
   client plays the deploy and its interpolation snaps instead of sliding), `['atk', src, tgt, projKind]`
   (`none|arrow|bolt|bomb|lob|orb|drone|enemy|boomerang|droneBomb|chain|chainHeal`; a boomerang's way back has no event —
@@ -1883,3 +1893,19 @@ SDK-owned return records are immutable copies; live Battle/Unit callback objects
 ### Declarative operator traits (0.3.1, #671)
 
 The optional `public/js/battle/operatorTraits.js` loader adapter attaches operator-owned DSL after unit setup, using existing trigger/action helpers and the existing `elementBurst` event. Its fingerprint is pinned only in participating content sets; vanilla sim/shared bytes are unchanged. Server match hosts, studio trials and the browser loader install it; direct harness battles must call `installServerOperatorTraits(data)` from `server/plugins/operatorTraits.js` first and restore with vanilla data afterward. [ASSUMED] Layer caps are per holder/action/bond across redeploy, reset per battle. See [PLUGIN-DSL §10](PLUGIN-DSL.md#10-干员特质031671) for the fixed element vocabulary and filters.
+
+Attack pacing (PR #729): UnitInfo carries the actual attack interval in game seconds. A `rate` event after the ally
+phase and before projectiles carries changes; its baseline is seeded by birth info. The renderer looks ahead through
+the attack tick, including a rate later in that tick, without borrowing a later tick’s value. Its 0.2–6 second display
+window is [ASSUMED]; damage, attack timing and targeting are unchanged.
+
+### Adaptive rehearsal limits
+
+The opt-in adaptive strategy passes `{ stage: 3, tickBudget: 6 * cap }` into RehearsalRun. Total ticks are
+separate from per-call `spent` replay counts; Node and Worker apply identical strict tick limits. Initial candidates
+retain order, followed by extension up to eight. Zero-leak stopping requires a completed, error-free `cleared`
+result for the evaluated player. Truncated candidates never certify zero or displace completed candidates.
+Default runs have no adaptive limits. See [BOT_STRATEGIES](BOT_STRATEGIES.md) for candidate and takeover details.
+
+Blemishine S3 (§35.91): kit trigger DEFAULT overrides the guardian class condition, while rawRule retains TAKE_DAMAGE.
+No damage/heal settlement or other guardian trigger changes.

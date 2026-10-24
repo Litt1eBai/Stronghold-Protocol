@@ -13,6 +13,9 @@ making one, in Chinese). The [settlement usage guide](../server/sim/AGENTS.md) g
 
 ## 1. What runs where
 
+AI strategy selection is documented in [BOT_STRATEGIES](BOT_STRATEGIES.md): `botStrategyContract.js` defines
+the five hooks, `botStrategies.js` registers legacy/external/ioleta/adaptive/ioleta-adaptive, and `botIoletaPolicy.js` holds opt-in procurement heuristics.
+
 ```
  browser (public/)                               one Node process (server/index.js, Node ≥ 22)
  ┌──────────────────────────────────────┐        ┌─────────────────────────────────────────────────────┐
@@ -101,10 +104,10 @@ so old imports keep working: `public/js/ui/gameLogic.js` (`public/js/ui/gameLogi
 | `server/match/host/` | where a room with gameplay plugins plays (P1c, DESIGN §32.6): `index.js` one child process — or worker thread, `SP_MATCH_HOST=worker` — per content set, the watchdog and the limits; `childHost.js` adds permission-limited JSON-IPC children for sandbox scripts; `entry.js` inside it checks the set's bytes against `cs`, installs the data and only then imports `Match.js`; `ipc.js` validates and bounds child messages in the parent; `proxy.js` is the lobby's `room.match` for such a match (Promise answers, the room's messages in order) |
 | `server/packs.js` | the content-pack API of 0.2.0 (PACKS.md), a compatibility export of `server/plugins/registry.js` |
 | `server/update.js` | the update package on the player's machine (DEPLOY.md §1.5): before the server starts, an extracted `UPDATE.json` is finished — the install verified against `MANIFEST.json`, the files the new version dropped deleted, or the start refused when the install is another version; doctor's `MANIFEST.json` check |
-| `server/ai/transport.js` | Operator-enabled external AI HTTP(S) / stdio IO; match policy and seat observations live in `server/match/externalAI.js` ([API](EXTERNAL_AI.md)) |
+| `server/ai/transport.js` | Operator-enabled external AI HTTP(S) / stdio IO; match policy and seat observations live in `server/match/externalAI.js` ([API](EXTERNAL_AI.md)). Development-only; omitted from release packages (§35.66) |
 | `server/match/Match.js` | one match: the phase machine, timers, the round loop, co-op, the views; its methods are in `server/match/match/` (`phases.js`, `prep.js`, `combat.js`, `clientCombat.js`, `rehearsal.js`, `reports.js`, `unitePhase.js`, `bossRounds.js`, `settle.js`, `views.js`, `intents.js` …) |
 | `server/match/PlayerState.js` | one player's shop, hand, board, items, bonds and LP, and every prep intent; its methods are in `server/match/player/` (`economy.js`, `acquire.js`, `placement.js`, `items.js`, `pieces.js`, `prep.js`, `round.js`, `diy.js`, `views.js` …) |
-| `server/match/` (the rest) | `pool.js` (the shared chess pool), `board.js` (placement), `bondsMeta.js`, `effectsMeta.js` and `builtinMeta.js` (prep-phase effects), `choices.js` (机变), `waves.js`, `unite.js` (联防), `finalAssault.js`, `results.js`, `bot.js` (AI players and AI 托管), `fields.js` (the battles of a combat phase), `scheduler.js`, `gamedata.js` |
+| `server/match/` (the rest) | `pool.js` (the shared chess pool), `board.js` (placement), `bondsMeta.js`, `effectsMeta.js` and `builtinMeta.js` (prep-phase effects), `choices.js` (机变), `waves.js`, `unite.js` (联防), `finalAssault.js`, `results.js`, `bot.js` (AI players and AI 托管), `botPrep.js` (shared synchronous prep sequencing), `botFormationCandidates.js` (opt-in contact geometry), `fields.js` (the battles of a combat phase), `scheduler.js`, `gamedata.js` |
 | `server/sim/Battle.js` | one battle field; its methods are in `server/sim/battle/` (`lifecycle.js`, `spawns.js`, `deploy.js`, `blocking.js`, `combat.js`, `status.js`, `summons.js`, `displacement.js`, `events.js` …) |
 | `server/sim/` (the rest) | `skills.js`, `ai.js`, `attack.js` (the explicit settlement API), `attack/` (hit, ordered injury effects, transfers, health, element, heal and helpers), `buffs.js`, `targeting.js`, `grid.js` (pathing), `units.js`, `professions.js`, `snapshot.js`, `spec.js` (the BattleSpec), `rehearsal.js` (tests AI layouts and picks the best, shared with the browser), `simdata.js` (data records → engine defs), `nodeData.js` (the Node-only data loader, never served) |
 | `server/sim/content/` | everything game-specific, installed into a battle by `server/sim/content/index.js` |
@@ -171,8 +174,18 @@ public/assets/ ─────────▶ public/js/render/, public/js/audio
   "Official versions (M0)"; DESIGN §35.22).
 - **On the server**, `server/data.js` loads the files once; the match reads them through `server/match/gamedata.js`,
   the sim through `server/sim/simdata.js`, which turns every record into a frozen engine def.
-- **In the browser**, `public/js/data.js` fetches the same files once per page for the UI, and the battle runner loads
-  its own frozen copies for the sim (`loadBrowserSim` → `setSimData`), so both sides simulate from the same data.
+- **In the browser**, `public/js/data.js` fetches the same files once per page for the UI, and the battle runner hands
+  the sim those parsed files (`loadBrowserSim` `reuse`, adopting them as they are and freezing them there → `setSimData`;
+  only `waves` — which the UI never loads — is downloaded for the sim), so both sides simulate from the same data and
+  the page holds one object graph instead of two. The freeze happens when the sim loads, not when the page does: the
+  sim's guarantee (a content bug that writes into a record fails on both sides) starts at the first battle, and the
+  main thread's frozen objects are what the rehearsal Worker receives as its own structured-clone copy. `reuse` is only
+  for the original content: a room's content set passes its own files (`data`), and the loader adopts files only while
+  the page's owner (`reuseOwner` → `data.contentId`) is the original — checked around every retrieval — so a set that is
+  already in the store, or adopted while the load is in flight, is never handed to the original simulation. Measured with the loader called directly (Node 22.22.2, Apple M1, a fresh process
+  per run, heapUsed after GC): the loader's own allocation drops from 34.3 MiB to 26.0 MiB — the ten adopted files are
+  5.19 MB of JSON and are not parsed again. In a browser the absolute numbers differ; the saving is the same second copy
+  that no longer exists.
 - **Languages.** Chinese is the source language; every other language is a pack — `public/i18n/<code>.json` (UI
   strings) and optionally `data/i18n/<code>.json` (game texts), listed by the server at `/packs/index.json`
   (`server/packs.js`; PACKS.md). The English game texts come from the official EN client (`tools/build-i18n.mjs` →
@@ -219,7 +232,7 @@ public/assets/ ─────────▶ public/js/render/, public/js/audio
 | a bond, 特质, item or strategy | `server/sim/content/bonds/`, `server/sim/content/garrisons/`, `server/sim/content/items/`, `server/sim/content/bands/` (the battle side and the prep side apart) | META.md §2 |
 | the shop, economy, hand or placement | `server/match/player/`, `server/match/pool.js`, `server/match/board.js` | `test/match/` |
 | phases, timers, 联防, the Final Assault | `server/match/match/phases.js`, `server/match/match/unitePhase.js`, `server/match/match/bossRounds.js`, `server/match/unite.js`, `server/match/finalAssault.js` | META.md §1, §4 |
-| the bots | `server/match/bot.js` (unchanged legacy), `server/match/botStrategyContract.js` (definitions), `server/match/botStrategies.js` (registry) | `docs/BOT_STRATEGIES.md`, `tools/botbench.mjs` |
+| the bots | `server/match/bot.js` (unchanged legacy), `server/match/botStrategyContract.js` (definitions), `server/match/botStrategies.js` (registry), `server/match/botIoleta.js` / `botAdaptive.js` (opt-in strategies) | `docs/BOT_STRATEGIES.md`, `tools/botbench.mjs` |
 | a new client message | `shared/protocol.js` (`C2S`), then `server/match/match/intents.js` (or `server/lobby.js` for `room.*`) | DESIGN §8 |
 | data from the official tables | `tools/build-data.mjs` | rebuild `--offline`, JSON compare, DATA.md, golden |
 | a screen or a HUD panel | `public/js/screens/`, `public/js/ui/`; pure logic in `public/js/ui/gameLogic/` | `test/ui/` |
@@ -234,3 +247,47 @@ public/assets/ ─────────▶ public/js/render/, public/js/audio
 Before changing a rule, read the DESIGN section that owns it (module headers cite their sections; the table in
 DESIGN.md names the file that holds each) and the official source; a rule no source settles is marked `[ASSUMED]`
 ([CONTRIBUTING.md](../CONTRIBUTING.md) §3).
+
+Browser sim reuse requires both a data getter and an explicit ownership getter returning null before and after retrieval.
+Without either hook it fetches normally; plugin and historical-version data keep their structured clones (PR #722).
+
+## 7. The server-side worker pool
+
+`server/workers/pool.js` is where CPU-heavy work can leave the main thread. One pool owns a bounded set of worker
+threads; work is submitted as a task (a function name plus its arguments) and comes back as a promise.
+
+- **Opt-in, and off by default.** `SP_WORKERS` names the thread count (`1`–`32`); unset, `0` or an unusable value
+  starts no pool at all, so the code paths below simply keep running on the main thread. Nothing in this section
+  changes a server that does not set it.
+- **Bounded, not elastic.** The thread count never exceeds the configured maximum, so an overloaded server does not turn
+  into a thread storm: work that does not fit the queue is refused (`POOL_FULL`). The queue is bounded too and has a
+  priority, so a low-priority task cannot starve a player-visible one.
+- **Cancellation and timeouts** are first-class: a task can be cancelled before it starts, and one that runs longer
+  than its timeout is terminated and replaced, so a worker stuck on bad input cannot quietly wedge the pool.
+- **Thread reuse.** A worker is returned to the idle list after each task instead of being respawned, which matters on
+  Windows where thread start-up costs tens of milliseconds.
+- **One pool, no lanes.** `server/workers/roomPool.js` provides the submission method a match needs — a room registers a key while it
+  holds work, and `stats()` counts those rooms — over that one pool. It deliberately does not pin rooms to lanes: a pool
+  per room (or per lane) would multiply the thread count, and the pool is the server's, not a room's.
+- **What runs in it today.** Bot layout rehearsals: `MatchRehearsal.poolRehearsal` (`server/match/match/rehearsal.js`)
+  submits the same candidates the local run would simulate to `server/workers/simulation.js`, which builds each
+  candidate Battle lazily from a serialized BattleSpec with the original cap and adaptive limits and returns the winning index. The pool decides where the
+  CPU is spent, never what is compared. A room's simulation tick, snapshot encoding and the state writes are *not* in
+  the pool yet — they arrive as separate changes.
+- **Every refusal is a fallback, not an error.** An absent, busy or broken pool, `POOL_FULL` or a failed task resumes the same candidates on the main thread; ending a prep cancels pending work; a busy pool costs latency, never a different
+  layout. Gameplay-plugin and non-default-version rooms never receive this default-data pool; their own match host rehearses locally.
+- **A dead thread is replaced, not isolated.** A worker that exits abnormally or overruns its timeout is terminated
+  and replaced, and the task it was running is rejected (`WORKER_FAILED` / `TASK_TIMEOUT`), so the caller sees an error
+  instead of a hang; while it is stopping it still counts against the pool size — and it keeps its place in the queue
+  budget too, so a `terminate()` that never resolves cannot make repeated submissions overrun the bound. This is not a
+  safety boundary: a worker is a thread of the same process, so an out-of-memory kill or a native crash there can still
+  take the whole server down — why this pool only receives rehearsal jobs; plugin/version match hosts have separate transport settings.
+- **Measuring it.** `server/health/eventLoop.js` samples main-thread event-loop delay (`monitorEventLoopDelay`) per
+  window with no pool involved and writes one local log line — `[loop] p50=… p95=… p99=… max=… samples=… cpu=… mem=…
+  rooms=… matches=… humans=… spectators=… phase=… rehearsals=…`. Off by default, `SP_LOOP_SAMPLE=1` turns it on, `SP_LOOP_WINDOW_MS`
+  sets the window; the last lines stay in memory for a report. It is deliberately *not* part of `/healthz`: the operator
+  reads it to tell a rehearsal stall from a battle slice, which is what decides whether more work should move into the
+  pool at all. `stats()` on the pool reports the live threads, the queue depth and the tasks finished; the tests read it.
+
+The rule of thumb for new work: if it is pure CPU over data the worker can be given (a simulation step, an encode, a
+snapshot), it belongs in a task; if it touches sockets, timers or the lobby, it stays on the main thread.

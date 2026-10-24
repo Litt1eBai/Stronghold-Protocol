@@ -4,7 +4,10 @@ The strategy interface selects trusted server-side AI code per match. It keeps t
 [`bot.js`](../server/match/bot.js) as the default, named `legacy`; registering another strategy does not change
 legacy's weights, RNG consumption, economy, placement or rehearsal. The framework is PR #673 by
 @HankDUMPLINGZhong. The optional `external` adapter is documented in [External AI API](EXTERNAL_AI.md)
-and the [Chinese server-owner guide](EXTERNAL_AI_ZH.md).
+and the [Chinese server-owner guide](EXTERNAL_AI_ZH.md). Until LLM-played seats clear 终极, that adapter is
+development-only and is not in a release package (maintainer 2026-10-23, §35.66). A packaged server keeps
+`legacy` and ignores `SP_BOT_STRATEGY=external`.
+The opt-in `ioleta`, `adaptive` and `ioleta-adaptive` strategies (PR #742) are described below.
 
 The contract lives in [`botStrategyContract.js`](../server/match/botStrategyContract.js); the built-in registry is
 [`botStrategies.js`](../server/match/botStrategies.js). Implementations import the contract, not the registry, to
@@ -65,11 +68,15 @@ import { defineBotStrategy, LEGACY_BOT } from '../botStrategyContract.js';
 export const myBot = defineBotStrategy({
   id: 'my-bot',
   *prepBegin(match, player, options) {
-    // Perform custom legal PlayerState actions here; yield between complete actions.
+    // Optional non-procurement setup; the following call runs the full legacy prep.
     return yield* LEGACY_BOT.prepBegin(match, player, options);
   },
 });
 ```
+
+The legacy call above includes buying and layout. A replacement procurement policy must compose the shared
+prep actions once, as `createIoletaPrepSteps` does; calling a complete legacy prep after custom buying repeats
+the economy flow. Procurement and adaptive candidate generation are internal implementations, not extra hooks.
 
 Forward `options` when delegating: the `delegate` flag controls the existing host-browser rehearsal. Match still
 owns time slicing, pending delegated jobs, takeover, cancellation and the prep deadline. Do not simulate a pending
@@ -96,8 +103,10 @@ connections. An unknown ID prevents startup with an error naming `SP_BOT_STRATEG
 IDs, plus a reminder to unset the variable to use the original bot. Match construction also validates its selection.
 One match's selection does not change another match. The same strategy also handles humans under AI takeover.
 Strategy selection does not grant an AI seat priority in the band draft: the existing seat order and the room's
-existing AI-last option still apply. `legacy` and operator-enabled `external` are registered; the latter inherits
-all legacy hooks for fallback and requires transport configuration before startup.
+existing AI-last option still apply. `legacy` is always registered. On a development checkout, operator-enabled
+`external` is registered too; it inherits all legacy hooks for fallback and requires transport configuration before
+startup. A release package does not register it (§35.66).
+The three opt-in local strategies are also registered. External fallback remains legacy; advisor plans apply only while external owns the match.
 
 Test input journals record the resolved strategy ID as `init.options.botStrategy`, rather than serializing hooks.
 Replay uses that ID, or `legacy` for older journals without it, regardless of the replay host's environment.
@@ -125,8 +134,130 @@ skips the original picker's RNG draw). Regenerate both comparison runs with this
 Keep seeds, difficulty and rehearsal counts
 identical in comparisons; use `--jobs 1` for timing, since parallel load inflates the timings.
 
+终极 (ABYSS) is the hard target for both kinds of seat (history §35.62): compare with
+`node tools/botbench.mjs --configs solo:ABYSS,coop4:ABYSS --seeds 20 --seed 1 --json …`, and keep FUNNY / NORMAL /
+HARD from getting worse (`--configs solo:FUNNY,solo:NORMAL,solo:HARD,coop4:FUNNY,coop4:NORMAL,coop4:HARD --seeds 10`).
+A win is clearing the round-14 Final Assault (`victory`); round 15 is the optional Hidden Core. An `external` seat in
+plan mode runs the legacy executor with the plan's weights, so a legacy change moves plan seats too: since §35.62 the
+plan's primary core bond is legacy's focus, and legacy lineups can field a 6-member core bond.
+Since §35.63 legacy also levels to L5 at R9 and L6 at R11, trades 获得时 layer units (`tradeOnce`), commits to a
+6-member core (`coreGap`), values a healer from R5 and spends expiring funds on refreshes (`spendDown`). Since §35.64
+a boss round rehearses the same layout variants against the already-planned wave, on `deriveSeed(0xA11CE, fa:round:seat)`,
+for the visible countdown (`faRehearsalTicks`); counted leaks still rank first. 终极 needs 100
+seeds per mode to separate such rules from noise (seeds 1–40 to develop, the rest to check), and a per-match "share of
+the leader pool" (0 before the Final Assault, 1 for a win) moves long before the win count does.
+
 The match harness accepts `botStrategy` objects, so an implementation can be tested before registration. See
 [`bot-strategies.test.js`](../test/match/bot-strategies.test.js) for real draft, sliced prep, personal-choice and
 failure-cleanup tests; the existing delegated-rehearsal tests exercise the unchanged default path. Test legal actions
 and actual effects as well as scores. Follow [CONTRIBUTING](../CONTRIBUTING.md): run related tests, full CI and Golden
 before a PR; a framework-only change must leave all legacy Golden scenarios unchanged.
+
+## Opt-in Russell procurement
+
+`ioleta` prefers available `band_ioleta` at the opening; its other-band prep is legacy. It adds no exclusions for
+Goliath or Dobermann. Procurement uses the shared prep executor once, with an explicit policy passed through
+economic contexts. Placement scoring and the rehearsal budget retain their existing defaults.
+
+[ASSUMED] The policy targets staged core merges, substitutes available Arcane/Swift bonds when core bonds are
+disabled, and stops pursuing completed elites. L1 relaxes at R6 and exits at R7; L2 exits at R9 and L3 at R11.
+Every upgrade still requires the actual price. Affordable core merges and their rewards precede upgrades.
+Equipment yields to search only with room, a remaining refresh and enough money for refresh plus a target.
+Shown cards retain the engine's overdraw semantics; future searches read public stock. Real PlayerState return
+values govern success, and equipment uses the room's morph-slot rules.
+
+The committed plan is JSON-safe `player.botStrategyState.ioleta.plan`, recomputed at prep entry using that seat's
+previous plan. A fresh match/player has fresh state. Offline journal replay records the registered strategy ID
+and regenerates the state from inputs; pre-framework journals select legacy explicitly. A journal recorded with a
+`botStrategy` object replays through the strategy registered under its ID, so it replays only when that ID is
+registered with the same code (see above). Snapshot consumers must copy the namespace
+alongside player state when restoring mid-match.
+
+For independent local placement comparisons, compose the explicit actions:
+
+```js
+import { arrangeSteps, contactCandidatePlansSteps } from '../server/match/bot.js';
+import { createIoletaPrepSteps } from '../server/match/botIoleta.js';
+import { getBotStrategy } from '../server/match/botStrategies.js';
+
+const combined = {
+  id: 'ioleta-contact', base: getBotStrategy('ioleta'),
+  ...createIoletaPrepSteps({
+    arrangeSteps: (m, ps, options = {}) => arrangeSteps(m, ps,
+      { ...options, candidatePlans: contactCandidatePlansSteps }),
+  }),
+};
+// new Match({ ...matchOptions, botStrategy: combined });
+```
+
+The registered `ioleta` strategy selects procurement alone; measurements are in the
+[strategy summary](research/bot-strategies-summary.md).
+
+## #673 compatibility audit (2026-10-18)
+
+The registered Russell definition passes through createBotRegistry → defineBotStrategy. The resulting frozen
+object has exactly the five hooks above; pickCard and bountyKillChance inherit the legacy function references.
+Match resolves one strategy object for all AI and autoplay seats. Russell procurement branches on each player's
+bandId inside the prep hooks; mutable plans live on that player. Per-seat strategy selection is a proposal.
+
+The current contact implementation enters arrangeSteps → createRehearsalSteps and uses the existing job and
+scheduler lifecycle. The optional adaptive strategy retains synchronous iterators, delegate forwarding,
+job.run(budget, control), pending/done handling, takeover, cancellation and prepEnd cleanup. Apply identical
+deterministic stopping rules in server and browser rehearsal. The current protocol accepts candidate indices
+0–7. Any expansion must respect that limit or explicitly update and test the protocol.
+
+Audit coverage includes registered hook inheritance, a single Match containing AI and human takeover seats,
+one pair of purchasing passes per prep, non-Russell fallback, replay, contact delegation and real Worker
+completion/timeout/cancellation.
+
+Audit validation: targeted integration and documentation tests 67/67; real Chrome rehearsal Worker tests 3/3
+with zero skipped; changed tests pass lint. Runtime code is unchanged by this audit.
+
+## Optional adaptive strategies (P4)
+
+Two registered strategies share one map-independent placement search (`botAdaptive.js`):
+
+| ID | Opening band | Procurement | Placement |
+|---|---|---|---|
+| `adaptive` | legacy picker | legacy | adaptive search |
+| `ioleta-adaptive` | prefers Russell (as `ioleta`) | Russell procurement for Russell seats, legacy otherwise | adaptive search |
+
+Select `SP_BOT_STRATEGY=adaptive` (or `ioleta-adaptive`) or `opts.botStrategy`. `adaptive` is placement-only: its
+base is legacy, so it inherits the legacy band picker, pickCard and bountyKillChance and builds its prep from legacy
+procurement with the adaptive `arrangeSteps`. `ioleta-adaptive` takes ioleta as base and composes Russell procurement
+once with the same placement. A Match still shares one frozen strategy across AI and autoplay seats; the shared
+executor runs one procurement sequence (the usual two purchasing passes), then rehearses and finishes.
+
+[ASSUMED] Candidate order: the fixed-three contact list as a prefix, remaining legacy geometry variants, then contact
+repairs of the remaining variants, deduplicated by unit/tile/direction and capped at eight. Every candidate uses
+current routes, legal tiles and attack ranges. No taught map profile participates. Rehearsal disabled/one candidate
+keeps the configured off/single behavior. Boss and hidden geometry retain their existing fallback.
+
+[ASSUMED] Search always considers the initial three distinct candidates when available. It expands while none of
+the completed, error-free, non-synthetic `cleared` results has zero counted personal leaks. Natural timeout,
+forced/capped, failed, missing and synthetic results cannot certify zero. A total of six per-candidate tick caps is
+a strict bound, checked on every tick; a partially evaluated candidate cannot displace a completed candidate.
+The usual beaten-candidate pruning and score/tie ordering remain. The old taught implementation used twelve caps
+of total tick allowance, checked between candidates; twelve was not its candidate count. This version deliberately
+registers six strict caps and at most eight candidates, within the existing choice 0–7 protocol.
+
+Optional `limits: { stage, tickBudget }` travels with b.rehearsal to the production Worker. Both paths construct
+RehearsalRun with the same limits. A takeover starts the same deterministic run from the same specs. Job state,
+synchronous generators, delegate forwarding, run(budget, control), per-call replay counts (`spent`), pending/done,
+cancellation and prepEnd remain on the existing lifecycle. Total ticks use a separate `totalTicks` counter.
+Worker diagnostic stats stay inside the page; the C2S response remains taskId plus choice/error.
+
+`test/match/ioleta-adaptive-ws-delegation.browser.test.js` (`SIM_E2E=1`, `CHROME_PATH`) runs this path over a real
+websocket: startServer configured only by `SP_BOT_STRATEGY=ioleta-adaptive` and `SP_BOT_REHEARSAL=host`, a co-op
+room with three AI seats, and the production Worker in headless Chrome answering, staying silent (timeout takeover) or
+holding its result back (cancellation of a running task). The host's socket is a Node ws client bridged to the page;
+the game UI is not part of it.
+
+`test/match/bot-strategies-scenarios.test.js` runs every registered strategy through a four-seat co-op match to its
+end under the engine audit (联防 helpers, shared pool and equipment stock, AI 托管, boss round, Final Assault) and
+through a gameplay-plugin room, whose rehearsal stays on the server. Measured strength and compute cost, with the
+configuration, seeds, version and commands to reproduce them, are in the
+[strategy summary](research/bot-strategies-summary.md).
+
+Legacy and adaptive prep retain §35.63 `spendDown` between advisor spending and freezing, without another yield.
+[ASSUMED] Ioleta procurement owns its refresh budget and omits that legacy sweep. Framework by @HankDUMPLINGZhong; strategies by @Lidong1793.

@@ -503,8 +503,12 @@ const target = (v) => {
 /** @type {Record<string, Record<string, (v:any)=>boolean> & { $optional?: string[] }>} */
 export const C2S = {
   // session & lobby
+  // `delta`: the client speaks the state-delta transport (shared/stateDelta.js) and wants m.public / m.private as
+  // `m.state` frames. Omitted by every client that cannot decode them — those keep receiving the plain frames, and a
+  // server that does not know the field ignores it (it is only read after a full validateC2S pass).
   hello: { name: (v) => isStr(v, NAME_MAX_LEN) && v.trim().length > 0, token: (v) => v == null || isStr(v, 64), version: (v) => v == null || isInt(v, 0, 1e6),
-    noReplace: isBool, claimAt: (v) => isNum(v, 0, Number.MAX_SAFE_INTEGER), $optional: ['token', 'version', 'noReplace', 'claimAt'] },
+    noReplace: isBool, claimAt: (v) => isNum(v, 0, Number.MAX_SAFE_INTEGER), delta: (v) => v == null || isInt(v, 0, 1e6),
+    $optional: ['token', 'version', 'noReplace', 'claimAt', 'delta'] },
   ping: { c: (v) => typeof v === 'number' && Number.isFinite(v) },
   // test: only the literal true (DESIGN §34.8). Omit it for a normal room — `false` is a bad field, so a
   // string cannot sneak in as "not a test". The server still refuses it unless SP_TEST_MODE is on.
@@ -527,6 +531,11 @@ export const C2S = {
   // 「不限时」 (DESIGN §35.23.10; host, before the match, a solo room of a version whose solo is timed): the match's
   // preparation and 机变 stay untimed (Match opts.soloUnlimited). Off by default; room.state omits the key unless it is on.
   'room.setSoloUnlimited': { on: isBool },
+
+  // Remake-only spectator handover: host opt-in before play, default off (§35.100).
+  'room.setAiTakeover': { on: isBool },
+  'room.aiRequest': { botId: isId },
+  'room.aiVote': { voteId: (v) => typeof v === 'string' && v.length <= 16, approve: isBool },
   'room.addBot': {},
   'room.removeBot': { seat: (v) => isInt(v, 0, MAX_SEATS - 1) },
   // the host removes another human before the match (server/lobby.js kick; community report #17); playerId = the one the
@@ -654,6 +663,11 @@ export const C2S = {
     taskId: isId, choice: (v) => v === undefined || isInt(v, 0, 7), error: (v) => v === undefined || v === true,
     $optional: ['choice', 'error'],
   },
+  // State-delta transport (shared/stateDelta.js): the client asks for one full frame after it missed one. The server
+  // answers with a full frame on each state channel it speaks (m.public / m.private), which is what restores the
+  // baseline; it is rate-limited like the other resend-heavy intents (server/net.js HEAVY_TYPES, and the lobby's
+  // resyncMinGapMs). An old client never sends it and keeps receiving the frames it always got.
+  'state.resync': {},
 };
 
 // Server → client message types (documentation + client dispatch table keys).
@@ -704,6 +718,13 @@ export function validateC2S(msg) {
 export const EV = Object.freeze({
   SPAWN: 'spawn', ATK: 'atk', DMG: 'dmg', HEAL: 'heal', SKILL: 'skill', ENGAGE: 'engage', DIE: 'die', LEAK: 'leak',
   STATUS: 'status', FX: 'fx', LAYER: 'layer', BOUNTY: 'bounty', DEPLOY: 'deploy', CAST: 'cast',
+  // ['rate', id, seconds] - the unit's OWN attack interval (`u.s.interval`, buffs and skills included) changed. Sent
+  // once per change: the FIRST value travels in the spawn UnitInfo (`atkInterval`) and is not repeated, and a change is
+  // never swallowed by that seed; an event's value outranks the spawn-time UnitInfo for the rest of the battle (ordinary
+  // snapshots do not refresh it). Display
+  // only: the renderer paces the attack clip over it (render/attackRate.js) instead of waiting to measure two attacks,
+  // which is what made the first swing of a skill / buff change slow-motion for a while.
+  RATE: 'rate',
 });
 
 /**
