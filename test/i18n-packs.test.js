@@ -142,7 +142,12 @@ test('the server: GET /packs/index.json lists the packs live, GET /packs/<id>/<f
     assert.equal(raw, 404);
     assert.equal((await get('/i18n/qaa.json')).status, 200, 'a single-file pack: the language folder');
     put(root, 'public/i18n/qag.json', { 开始: 'G' });
-    await new Promise((r) => setTimeout(r, 1100)); // the registry looks again after a second
+    // The registry uses Date.now; a fixed timer can wake before its cache expires after a WSL clock correction.
+    const waitStart = Date.now(), waitDeadline = performance.now() + 5000;
+    while (Date.now() - waitStart < 1100) {
+      assert.ok(performance.now() < waitDeadline, 'the registry cache clock advances');
+      await new Promise((r) => setTimeout(r, 50));
+    }
     assert.ok((await (await get('/packs/index.json')).json()).packs.some((p) => p.id === 'qag'), 'a dropped pack shows on the next request');
   } finally {
     await srv.close();

@@ -12,7 +12,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Repository-owned author resources only; installed plugins and studio keys never ship. */
 export const SERVER_PLUGIN_RESOURCES = ['schemas', 'plugins/_template', 'plugins/README.md', 'plugins/AGENTS.md',
   'docs/PLUGINS.md', 'docs/PLUGIN-GUIDE.md', 'docs/PLUGIN-DSL.md', 'docs/PLUGIN-API.md',
-  'docs/plugin-catalog.example.json', 'tools/plugin.mjs', 'tools/assets', 'test/helpers/battleHarness.js'];
+  'docs/plugin-catalog.example.json', 'tools/plugin.mjs', 'tools/assets', 'tools/local-extract/expected.mjs',
+  'test/helpers/battleHarness.js'];
 
 /** Explicit runtime allowlist: no account databases, signing keys or development caches. */
 export async function stageServer(root, stage) {

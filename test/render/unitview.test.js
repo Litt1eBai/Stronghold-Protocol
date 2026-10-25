@@ -119,12 +119,13 @@ describe('fallback portraits (avatar diamonds)', () => {
     let release;
     const gate = new Promise((r) => { release = r; });
     const assets = { ...store(), image: () => gate };
+    // UnitView measures its grace period with performance.now; wall-clock corrections must not change this check.
+    const t0 = performance.now();
     const v = view({ defId: 'char_d', avatar: 'char_d' }, {}, assets);
     v.update(1 / 60, cam(), 0);
     assert.equal(diamonds().length - before, 0, 'nothing built while the avatar may still arrive quickly');
-    const t0 = Date.now();
-    while (v.fallback.texture === fake.P.Texture.EMPTY && Date.now() - t0 < 5000) { await new Promise((r) => setTimeout(r, 40)); v.update(1 / 60, cam(), 0); }
-    assert.ok(Date.now() - t0 >= 300, 'placeholder only after the wait');
+    while (v.fallback.texture === fake.P.Texture.EMPTY && performance.now() - t0 < 5000) { await new Promise((r) => setTimeout(r, 40)); v.update(1 / 60, cam(), 0); }
+    assert.ok(performance.now() - t0 >= 300, 'placeholder only after the wait');
     assert.notEqual(v.fallback.texture, fake.P.Texture.EMPTY, 'placeholder while waiting');
     release({ width: 180, height: 180 });
     await tick(); await tick();
