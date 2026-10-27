@@ -6,9 +6,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { computeBuildTag } from '../server/http/buildTag.js';
+import { versionsFrom } from '../server/http/config.js';
+import { versionById } from '../shared/versions.js';
 import { omitLlmFromRelease } from '../server/match/llmRelease.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Match the server's fingerprint: enabled historical version data is served browser runtime too. */
+export function releaseBuildTag(root, versions = {}) {
+  const servedVersionDirs = versionsFrom({ versions }).enabled.map(versionById)
+    .filter((entry) => entry?.dir).map((entry) => path.join(root, 'data', entry.dir));
+  return computeBuildTag(root, { servedVersionDirs });
+}
 
 /** Repository-owned author resources only; installed plugins and studio keys never ship. */
 export const SERVER_PLUGIN_RESOURCES = ['schemas', 'plugins/_template', 'plugins/README.md', 'plugins/AGENTS.md',
@@ -67,7 +76,7 @@ async function main() {
     const vendor = spawnSync(process.execPath, ['tools/vendor.mjs'], { cwd: stage, stdio: 'inherit' });
     if (vendor.error || vendor.status !== 0) throw vendor.error || new Error('Production vendor staging failed');
     await normalizeReleaseTimes(stage, Math.floor(Date.now() / 1000));
-    const build = computeBuildTag(stage);
+    const build = releaseBuildTag(stage);
     if (!build) throw new Error('Could not compute server build fingerprint');
     const info = { id, commit, app: pkg.version, build, androidVersionCode: announcement.versionCode };
     await writeFile(path.join(stage, 'RELEASE.json'), `${JSON.stringify(info, null, 2)}\n`);

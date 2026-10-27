@@ -5,11 +5,33 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { stageServer, normalizeReleaseTimes, SERVER_PLUGIN_RESOURCES } from '../tools/server-release.mjs';
+import { stageServer, normalizeReleaseTimes, releaseBuildTag, SERVER_PLUGIN_RESOURCES } from '../tools/server-release.mjs';
 import { computeBuildTag } from '../server/http/buildTag.js';
 import { templateFile } from '../server/studio/gameData.js';
 import { importProblems } from '../tools/package.mjs';
 import { LLM_RELEASE_MARKER, isLlmReleasePath } from '../server/match/llmRelease.js';
+import { VERSIONS, DEFAULT_VERSION } from '../shared/versions.js';
+
+test('release fingerprint includes enabled historical data exactly as the running server does', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sp-release-versions-'));
+  try {
+    await mkdir(path.join(root, 'public'), { recursive: true });
+    await writeFile(path.join(root, 'public/index.html'), '<html>');
+    const dirs = VERSIONS.filter((v) => v.dir).map((v) => path.join(root, 'data', v.dir));
+    for (const dir of dirs) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, 'config.json'), '{}');
+    }
+    const all = releaseBuildTag(root, { enabled: 'all' });
+    assert.equal(all, computeBuildTag(root, { servedVersionDirs: dirs }));
+    const single = releaseBuildTag(root, { enabled: [DEFAULT_VERSION] });
+    assert.equal(single, computeBuildTag(root));
+    assert.notEqual(all, single, 'historical data cannot be omitted from a multi-version release identity');
+    await writeFile(path.join(dirs[0], 'config.json'), '{"changed":true}');
+    assert.notEqual(releaseBuildTag(root, { enabled: 'all' }), all);
+    assert.equal(releaseBuildTag(root, { enabled: [DEFAULT_VERSION] }), single);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test('runtime staging excludes credentials, accounts and stale update announcements; fingerprint survives tar', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'sp-server-stage-'));
