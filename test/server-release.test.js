@@ -9,6 +9,7 @@ import { stageServer, normalizeReleaseTimes, SERVER_PLUGIN_RESOURCES } from '../
 import { computeBuildTag } from '../server/http/buildTag.js';
 import { templateFile } from '../server/studio/gameData.js';
 import { importProblems } from '../tools/package.mjs';
+import { LLM_RELEASE_MARKER, isLlmReleasePath } from '../server/match/llmRelease.js';
 
 test('runtime staging excludes credentials, accounts and stale update announcements; fingerprint survives tar', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'sp-server-stage-'));
@@ -20,6 +21,10 @@ test('runtime staging excludes credentials, accounts and stale update announceme
       'server/index.js', 'shared/constants.js', 'data/chess.json', 'public/index.html', 'public/updates/android.json', '.cache/accounts.json', '.env']) {
       await writeFile(path.join(source, file), '{}');
     }
+    await writeFile(path.join(source, 'package.json'), JSON.stringify({ version: '0.3.4-dev' }));
+    await mkdir(path.join(source, '.cnb'));
+    await writeFile(path.join(source, '.cnb/release-notes.txt'), '召唤物随主人换装。\n');
+    await writeFile(path.join(source, 'CHANGELOG.md'), 'Internal development and deployment details');
     // The server shares pure helpers with browser rendering and studio authoring since 0.3.1.
     for (const folder of ['public/js', 'public/studio/js']) await cp(path.resolve(folder), path.join(source, folder), { recursive: true });
     for (const resource of SERVER_PLUGIN_RESOURCES) {
@@ -30,6 +35,8 @@ test('runtime staging excludes credentials, accounts and stale update announceme
     await writeFile(path.join(source, 'plugins/.studio-key'), 'local-only');
     await writeFile(path.join(source, 'plugins/config.json'), '{}');
     await stageServer(source, stage);
+    assert.equal(await readFile(path.join(stage, 'CHANGELOG.md'), 'utf8'),
+      '## 0.3.4-dev — 更新说明\n\n召唤物随主人换装。\n');
     const stagedFiles = [];
     async function walk(directory, prefix = '') {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -39,6 +46,8 @@ test('runtime staging excludes credentials, accounts and stale update announceme
       }
     }
     await walk(stage);
+    assert.ok(stagedFiles.includes(LLM_RELEASE_MARKER));
+    assert.ok(!stagedFiles.some(isLlmReleasePath), 'development-only AI integrations stay out of server releases');
     assert.deepEqual(importProblems(path.resolve('.'), stagedFiles), [], 'every shipped runtime import resolves inside the release');
     for (const file of ['.cache/accounts.json', '.env', 'public/updates/android.json',
       'plugins/owner-plugin', 'plugins/.studio-key', 'plugins/config.json']) await assert.rejects(access(path.join(stage, file)));

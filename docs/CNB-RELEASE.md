@@ -3,6 +3,7 @@
 `.cnb.yml` 在 `master` 推送时运行代码检查，在 `android-v*` 标签推送时构建并发布 Android APK，随后部署服务端。
 Windows 构建不在此流水线范围内。云端首次运行仍需实际验证 CNB 的权限、资源下载和服务器网络连通性。
 发布构建通过 `SP_MAVEN_CENTRAL_MIRROR` 优先使用 [Google Cloud Storage 的 Maven Central 镜像](https://maven-central.storage.googleapis.com/index.html)，以避开共享云端出口的源站限流；本机构建默认仍使用原有仓库。
+构建环境包含 `zip`，用于上游新增的发布归档启动测试；普通检查在安装依赖前补齐，Android 镜像预装。
 普通代码检查没有下载素材时跳过素材文件验证，仍检查皮肤元数据；发布流水线先准备完整素材，再运行包含文件验证的检查。
 
 ## 首次配置
@@ -55,19 +56,19 @@ SSH 连接和握手最多等待 15 秒；连接后定期检测服务端响应，
 ## 发布流程
 
 1. 修改 `client/android/app/build.gradle.kts` 的 `versionName` 和递增的 `versionCode`；每次原生发布都必须增加编号。
-2. 在 `.cnb/release-notes.txt` 只填写本版本的用户可见变更；不要放发布标签、部署步骤或签名说明。提交代码并同步到 CNB。
-3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.3.2-dev-1028`，推送到 CNB：
+2. 在 `.cnb/release-notes.txt` 只填写本版本的用户可见变更；不要放发布标签、部署步骤或签名说明。服务端打包时由同一份公告生成玩家版 `CHANGELOG.md`，供应用内更新说明展示；源码中的上游开发日志不随服务端发布。提交代码并同步到 CNB。
+3. 创建与源码完全匹配的标签，例如当前版本的 `android-v0.3.4-dev-1029`，推送到 CNB：
 
 ```bash
-git tag android-v0.3.2-dev-1028
-git push cnb android-v0.3.2-dev-1028
+git tag android-v0.3.4-dev-1029
+git push cnb android-v0.3.4-dev-1029
 ```
 
 如果本机无法认证 CNB，可在 CNB 云端环境同步代码后创建并推送标签。
 不要在旧源码上创建标签。流水线会拒绝与 Android 版本不匹配的标签。
 
 流水线先恢复官方棋盘与 11 个战场场景，再下载其他素材和皮肤，验证代码和 golden，然后构建、签名并上传 APK。
-APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.3.2-dev-1028.apk`，方便区分下载目录中的旧包。
+APK 文件名包含应用版本和编号，例如 `Stronghold-Protocol-v0.3.4-dev-1029.apk`，方便区分下载目录中的旧包。
 签名后从实际 APK 的 Manifest 核对包名、版本名、版本编号和最低 Android 版本；不一致时停止发布。
 `prepare-release-assets.mjs` 保留下载器的清单缩减保护和必需素材检查，并验证下载前后两份发布清单的全部文件引用。
 最新上游索引额外计划下载、但发布清单没有引用的资源，可以报告缺失；发布清单已引用的文件缺失、为空或为符号链接时必须失败。
@@ -122,6 +123,8 @@ CNB 参考：[构建语法](https://docs.cnb.cool/zh/build/grammar.html)、
 [Release 步骤](https://docs.cnb.cool/zh/build/internal-steps/git/release.html)。
 
 ## 0.3.0 插件资源与持久目录
+
+服务端发布包按上游发布门禁排除开发用外部 AI 与手动席位，内置人机照常提供。
 
 服务端发布包包含仓库自有的 `plugins/_template/`、Schemas、作者指南、插件 CLI 和作者测试助手。不会打包服主已安装的插件、`plugins/config.json` 或工作台密钥；工作台创建脚本和界面插件需要这些模板，不能只用健康检查代替资源校验。
 

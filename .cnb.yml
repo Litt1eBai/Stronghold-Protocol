@@ -11,7 +11,9 @@ master:
         RENDER_E2E: "0"
       stages:
         - name: Install dependencies
-          script: npm ci --no-audit --no-fund
+          script: |
+            apt-get update && apt-get install -y --no-install-recommends zip
+            npm ci --no-audit --no-fund
         - name: Verify
           script: npm run ci
         - name: Golden scenarios

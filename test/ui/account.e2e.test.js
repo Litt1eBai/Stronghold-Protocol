@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { seedReleaseRead } from '../helpers/releaseNotes.js';
 
 const chrome = process.env.CHROME_PATH;
 const enabled = process.env.SP_E2E === '1' && chrome && existsSync(chrome);
@@ -19,6 +20,7 @@ test('required account: bad password stays on login, password login and saved JW
     const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox'] });
     try {
       const page = await browser.newPage();
+      await seedReleaseRead(page);
       const errors = [];
       page.on('pageerror', e => errors.push(e.message));
       await page.goto(srv.url, { waitUntil: 'domcontentloaded' });

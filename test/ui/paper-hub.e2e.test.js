@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { png } from '../helpers/pluginFixtures.js';
+import { seedReleaseRead } from '../helpers/releaseNotes.js';
 
 const chrome = process.env.CHROME_PATH;
 const enabled = process.env.SP_E2E === '1' && chrome && existsSync(chrome);
@@ -24,6 +25,7 @@ test('paper hub on desktop and touch: local backdrop, reports, quick skins, port
     const newPage = async viewport => {
       const context = await browser.createBrowserContext(); contexts.push(context);
       const page = await context.newPage();
+      await seedReleaseRead(page);
       await page.setViewport(viewport);
       page.on('pageerror', e => { errors.push(e.message); console.error('page error:', e.message); });
       await page.evaluateOnNewDocument(() => { localStorage.setItem('sp.name', 'hub-test'); sessionStorage.setItem('sp.entered', '1'); });

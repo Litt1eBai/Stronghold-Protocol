@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { seedReleaseRead } from '../helpers/releaseNotes.js';
 const chrome = process.env.CHROME_PATH;
 const enabled = process.env.SP_E2E === '1' && chrome && existsSync(chrome);
 
@@ -15,6 +16,7 @@ test('settings are available after login, including Android adaptation of older 
     for (const android of [false, true]) {
       const ctx = await browser.createBrowserContext();
       const page = await ctx.newPage();
+      await seedReleaseRead(page);
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       await page.setViewport(android ? { width: 844, height: 390, hasTouch: true, isMobile: true } : { width: 1440, height: 900 });
       if (android) await page.evaluateOnNewDocument(() => {

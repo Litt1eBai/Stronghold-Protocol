@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { computeBuildTag } from '../server/http/buildTag.js';
+import { omitLlmFromRelease } from '../server/match/llmRelease.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -29,6 +30,13 @@ export async function stageServer(root, stage) {
       return true;
     } });
   }
+  omitLlmFromRelease(stage);
+  // The in-app changelog shares the Android announcement's player-facing text.
+  // Keep the upstream development log in source, outside the published runtime.
+  const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+  const notes = (await readFile(path.join(root, '.cnb/release-notes.txt'), 'utf8')).trim();
+  if (!pkg.version || !notes) throw new Error('Player-facing release notes are required');
+  await writeFile(path.join(stage, 'CHANGELOG.md'), `## ${pkg.version} — 更新说明\n\n${notes}\n`);
 }
 
 /** buildTag uses mtimes; GNU tar stores seconds, so normalize before fingerprinting. */

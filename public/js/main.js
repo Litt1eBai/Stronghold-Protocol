@@ -40,6 +40,7 @@
 // Polyfills first (older Safari / Firefox ESR): every module evaluated after this one sees them.
 import './ui/compat.js';
 import { mountRoomChat } from './ui/roomChat.js';
+import { ReleaseNotesHost } from './ui/releaseNotes.js';
 import { render } from '../vendor/preact.module.js';
 import { useErrorBoundary } from '../vendor/hooks.module.js';
 import { html, UiHosts, Button, MicroLabel, closeAllDialogs } from './ui/components.js';
@@ -385,6 +386,7 @@ function App() {
     <${ToastHost} />
     <${UiHosts} />
     <${GuideHost} />
+    <${ReleaseNotesHost} />
     <${LoadoutHost} />
     <${StatsHost} />
     <${VoteOverOverlays} />
